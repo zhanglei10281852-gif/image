@@ -1640,7 +1640,8 @@ app.post("/api/crawl/start", async (req, res) => {
     initDatabase();
     const provider = String(req.body.provider || "").trim();
     const query = String(req.body.query || "").trim();
-    const limitCount = Math.min(Math.max(Number(req.body.limit || 20), 1), 300);
+    const rawLimit = Number(req.body.limit || 20);
+    const limitCount = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : 20;
     const source = SOURCE_CATALOG.find((item) => item.provider === provider);
     if (!source) {
       res.status(400).json({ message: "请选择已支持的来源 provider" });

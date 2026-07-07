@@ -1027,7 +1027,7 @@ function App() {
         >
           <Space direction="vertical" size={16} className="source-panel">
             <div className="hint-box">
-              采集会在后端后台运行，并写入本地 SQLite。数据库按来源页 URL 和图片 URL 去重；导出过的记录默认不显示。国内公开网页源优先中文关键词，海外图库优先英文关键词；长任务建议每次先抓 10-50 条，确认质量后再扩大。
+              采集会在后端后台运行，并写入本地 SQLite。数据库按来源页 URL 和图片 URL 去重；导出过的记录默认不显示。国内公开网页源优先中文关键词，海外图库优先英文关键词；采集数量不设上限，长任务可随时终止。
             </div>
             <Row gutter={[12, 12]}>
               <Col xs={24} md={12}>
@@ -1077,7 +1077,7 @@ function App() {
                     </div>
                   ) : null}
                   <Text strong>数量</Text>
-                  <InputNumber min={1} max={300} value={crawlLimit} onChange={(value) => setCrawlLimit(Number(value || 20))} />
+                  <InputNumber min={1} value={crawlLimit} onChange={(value) => setCrawlLimit(Number(value || 20))} />
                   <Button type="primary" icon={<PlayCircleOutlined />} loading={crawlStarting} onClick={startCrawl}>
                     开始采集
                   </Button>
