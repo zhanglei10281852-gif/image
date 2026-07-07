@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Local crawl outputs can become very large.
+sample_run/
+data/
+outputs/

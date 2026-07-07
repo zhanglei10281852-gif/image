@@ -1,0 +1,6 @@
+interface:
+  display_name: "Desktop Scene Crawler"
+  short_description: "Traceable tabletop photo collection workflow"
+  default_prompt: "Use $desktop-scene-crawler to collect traceable real tabletop-scene photos and produce a QA-ready manifest."
+policy:
+  allow_implicit_invocation: true
