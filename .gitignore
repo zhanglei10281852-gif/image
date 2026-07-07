@@ -7,3 +7,7 @@ __pycache__/
 sample_run/
 data/
 outputs/
+desktop-scene-review-app/node_modules/
+desktop-scene-review-app/dist/
+desktop-scene-review-app/data/*.sqlite
+desktop-scene-review-app/data/*.sqlite-*

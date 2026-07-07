@@ -17,7 +17,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
-from urllib.parse import parse_qs, parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, parse_qsl, quote, urlencode, urlparse, urlunparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -133,6 +133,17 @@ CHINESE_WEB_DOMAINS = [
     "lofter.com",
     "zhihu.com",
     "jianshu.com",
+    "duitang.com",
+    "tuchong.com",
+    "zcool.com.cn",
+    "meipian.cn",
+    "sohu.com",
+    "163.com",
+    "smzdm.com",
+    "xiachufang.com",
+    "thepaper.cn",
+    "toutiao.com",
+    "bilibili.com",
 ]
 
 TRACKING_QUERY_PREFIXES = ("utm_",)
@@ -507,6 +518,652 @@ def provider_duckduckgo_web(session: requests.Session, query: str, limit: int) -
         if page_emitted == 0 and offset > 120:
             break
         offset += 30
+
+
+def provider_pxhere_web(session: requests.Session, query: str, limit: int) -> Iterator[Candidate]:
+    emitted = 0
+    seen_pages: set[str] = set()
+    page = 1
+    while emitted < limit and page <= 25:
+        search_text = request_text(
+            session,
+            "https://pxhere.com/en/photos",
+            params={"q": query, "page": page},
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        links = []
+        for link in re.findall(r'href="(/en/photo/\d+)"', search_text):
+            source_url = requests.compat.urljoin("https://pxhere.com", link)
+            if source_url not in seen_pages:
+                seen_pages.add(source_url)
+                links.append(source_url)
+        if not links:
+            break
+        page_emitted = 0
+        for source_url in links:
+            if emitted >= limit:
+                break
+            try:
+                page_text = request_text(session, source_url, headers={"User-Agent": "Mozilla/5.0"})
+            except requests.RequestException:
+                continue
+            soup = BeautifulSoup(page_text, "html.parser")
+            title = soup.title.string.strip() if soup.title and soup.title.string else ""
+            image_url = ""
+            download_url = ""
+            for a in soup.find_all("a", href=True):
+                href = a["href"]
+                if href.startswith("https://get.pxhere.com/photo/") and href.lower().endswith((".jpg", ".jpeg", ".png")):
+                    download_url = href
+                    break
+            if download_url:
+                image_url = download_url
+            if not image_url:
+                meta = soup.select_one('meta[property="og:image"]') or soup.select_one('meta[name="twitter:image"]')
+                if meta and meta.get("content"):
+                    image_url = meta["content"].strip()
+            if not image_url:
+                continue
+            author = ""
+            author_link = soup.select_one('a[href^="/en/photographer/"]')
+            if author_link:
+                author = author_link.get_text(" ", strip=True)
+            emitted += 1
+            page_emitted += 1
+            yield Candidate(
+                source_type="web",
+                source_platform="pxhere",
+                source_url=source_url,
+                source_image_url=image_url,
+                query=query,
+                title=title,
+                author=author,
+                license_type="cc0",
+                license_url="https://pxhere.com/en/license",
+                notes="PxHere public photo page; download URL extracted from original source page",
+            )
+        if page_emitted == 0:
+            break
+        page += 1
+
+
+def provider_foodiesfeed_web(session: requests.Session, query: str, limit: int) -> Iterator[Candidate]:
+    emitted = 0
+    seen_pages: set[str] = set()
+    slug = re.sub(r"[^a-z0-9]+", "-", query.lower()).strip("-") or "table"
+    search_urls = [
+        f"https://www.foodiesfeed.com/s/{quote(slug)}",
+        f"https://www.foodiesfeed.com/ja/s/{quote(slug)}",
+    ]
+    for search_url in search_urls:
+        if emitted >= limit:
+            break
+        try:
+            search_text = request_text(session, search_url, headers={"User-Agent": "Mozilla/5.0"})
+        except requests.RequestException:
+            continue
+        links: list[str] = []
+        for match in re.findall(r'/(?:ja/)?free-food-photo/[^"\'<>\\\s]+', search_text):
+            source_url = requests.compat.urljoin("https://www.foodiesfeed.com", match)
+            if source_url not in seen_pages:
+                seen_pages.add(source_url)
+                links.append(source_url)
+        for source_url in links:
+            if emitted >= limit:
+                break
+            try:
+                page_text = request_text(session, source_url, headers={"User-Agent": "Mozilla/5.0"})
+            except requests.RequestException:
+                continue
+            soup = BeautifulSoup(page_text, "html.parser")
+            title = soup.title.string.strip() if soup.title and soup.title.string else ""
+            image_url = ""
+            meta = soup.select_one('meta[property="og:image"]') or soup.select_one('meta[name="twitter:image"]')
+            if meta and meta.get("content"):
+                image_url = meta["content"].strip()
+            if not image_url or "/generated/thumbnails/" in image_url:
+                masters = re.findall(r'https?://[^"\'<>\\\s]+/generated/masters/[^"\'<>\\\s]+\.(?:jpg|jpeg|png|webp)', page_text)
+                image_url = masters[0] if masters else ""
+            if not image_url:
+                continue
+            emitted += 1
+            yield Candidate(
+                source_type="web",
+                source_platform="foodiesfeed",
+                source_url=source_url,
+                source_image_url=image_url,
+                query=query,
+                title=title,
+                author="Foodiesfeed",
+                license_type="cc0",
+                license_url="https://www.foodiesfeed.com/",
+                notes="Foodiesfeed public photo page; master image URL extracted from original source page",
+            )
+
+
+def provider_libreshot_web(session: requests.Session, query: str, limit: int) -> Iterator[Candidate]:
+    emitted = 0
+    seen_pages: set[str] = set()
+    page = 1
+    while emitted < limit and page <= 6:
+        try:
+            search_text = request_text(
+                session,
+                "https://libreshot.com/",
+                params={"s": query, "paged": page} if page > 1 else {"s": query},
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+        except requests.RequestException:
+            break
+        links: list[str] = []
+        soup = BeautifulSoup(search_text, "html.parser")
+        raw_hrefs = [a["href"] for a in soup.find_all("a", href=True)]
+        raw_hrefs.extend(re.findall(r'"url"\s*:\s*"(https://libreshot\.com/[^"]+/)"', search_text))
+        for href in raw_hrefs:
+            if any(skip in href for skip in ["/free-images/", "/free-stock-images-categories/", "/about-libreshot/", "/license-information/"]):
+                continue
+            if not re.match(r"https://libreshot\.com/[^/?#]+/$", href):
+                continue
+            if href not in seen_pages:
+                seen_pages.add(href)
+                links.append(href)
+        if not links:
+            break
+        page_emitted = 0
+        for source_url in links:
+            if emitted >= limit:
+                break
+            try:
+                page_text = request_text(session, source_url, headers={"User-Agent": "Mozilla/5.0"})
+            except requests.RequestException:
+                continue
+            soup = BeautifulSoup(page_text, "html.parser")
+            title = soup.title.string.strip() if soup.title and soup.title.string else ""
+            image_url = ""
+            for a in soup.find_all("a", href=True):
+                href = a["href"]
+                label = a.get_text(" ", strip=True).lower()
+                if "full size" in label and re.search(r"\.(?:jpg|jpeg|png|webp)$", href, re.IGNORECASE):
+                    image_url = href
+                    break
+            if not image_url:
+                candidates = re.findall(r'https://libreshot\.com/wp-content/uploads/[^"\'<>\\\s]+\.(?:jpg|jpeg|png|webp)', page_text)
+                full_size = [
+                    url for url in candidates
+                    if not re.search(r"-\d+x\d+\.", url)
+                    and "cropped-" not in url
+                    and "Green-Minimalist" not in url
+                ]
+                image_url = full_size[0] if full_size else ""
+            if not image_url:
+                continue
+            emitted += 1
+            page_emitted += 1
+            yield Candidate(
+                source_type="web",
+                source_platform="libreshot",
+                source_url=source_url,
+                source_image_url=image_url,
+                query=query,
+                title=title,
+                author="LibreShot",
+                license_type="libreshot-free",
+                license_url="https://libreshot.com/license-information/",
+                notes="LibreShot public photo page; full-size download URL extracted from original source page",
+            )
+        if page_emitted == 0:
+            break
+        page += 1
+
+
+def provider_freeimages_uk_web(session: requests.Session, query: str, limit: int) -> Iterator[Candidate]:
+    gallery_urls = [
+        "https://www.freeimages.co.uk/galleries/home/diningroom/index.htm",
+        "https://www.freeimages.co.uk/galleries/home/kitchen/index.htm",
+        "https://www.freeimages.co.uk/galleries/home/office/index.htm",
+        "https://www.freeimages.co.uk/galleries/food/index.htm",
+    ]
+    query_terms = [term for term in re.split(r"[^a-z0-9]+", query.lower()) if len(term) >= 3]
+    emitted = 0
+    seen_pages: set[str] = set()
+    for gallery_url in gallery_urls:
+        if emitted >= limit:
+            break
+        try:
+            index_text = request_text(session, gallery_url, headers={"User-Agent": "Mozilla/5.0"})
+        except requests.RequestException:
+            continue
+        index_soup = BeautifulSoup(index_text, "html.parser")
+        links: list[tuple[str, str]] = []
+        for a in index_soup.find_all("a", href=True):
+            href = a["href"]
+            if "slides/" not in href or not href.endswith(".htm"):
+                continue
+            source_url = requests.compat.urljoin(gallery_url, href)
+            label = " ".join([a.get_text(" ", strip=True), href]).lower()
+            if query_terms and not any(term in label for term in query_terms):
+                # Keep broad tabletop categories, but do not wander into unrelated appliance-only pages.
+                broad_terms = ["table", "plate", "cup", "food", "dining", "kitchen", "desk", "office", "cutlery", "breakfast"]
+                if not any(term in label for term in broad_terms):
+                    continue
+            if source_url not in seen_pages:
+                seen_pages.add(source_url)
+                links.append((source_url, label))
+        for source_url, label in links:
+            if emitted >= limit:
+                break
+            try:
+                page_text = request_text(session, source_url, headers={"User-Agent": "Mozilla/5.0"})
+            except requests.RequestException:
+                continue
+            soup = BeautifulSoup(page_text, "html.parser")
+            title = soup.title.string.strip() if soup.title and soup.title.string else ""
+            image_url = ""
+            for a in soup.find_all("a", href=True):
+                href = a["href"]
+                if "pics/" in href and re.search(r"\.(?:jpg|jpeg|png)$", href, re.IGNORECASE):
+                    image_url = requests.compat.urljoin(source_url, href)
+                    break
+            if not image_url:
+                pics = re.findall(r'https?://(?:www\.)?freeimageslive\.com/[^"\'<>\\\s]+/pics/[^"\'<>\\\s]+\.(?:jpg|jpeg|png)', page_text)
+                image_url = pics[0] if pics else ""
+            if not image_url:
+                continue
+            emitted += 1
+            yield Candidate(
+                source_type="web",
+                source_platform="freeimages_uk",
+                source_url=source_url,
+                source_image_url=image_url,
+                query=query,
+                title=title,
+                author="FreeImages.co.uk",
+                license_type="freeimages-uk-free",
+                license_url="https://www.freeimages.co.uk/terms.htm",
+                notes="FreeImages.co.uk public gallery page; full-size pics URL extracted from original source page",
+            )
+
+
+def provider_picjumbo_web(session: requests.Session, query: str, limit: int) -> Iterator[Candidate]:
+    emitted = 0
+    seen_pages: set[str] = set()
+    search_urls = [
+        f"https://picjumbo.com/search/{quote(query)}",
+        f"https://picjumbo.com/free-photos/{quote(query.split()[0] if query.split() else 'table')}/",
+    ]
+    for search_url in search_urls:
+        if emitted >= limit:
+            break
+        try:
+            search_text = request_text(session, search_url, headers={"User-Agent": "Mozilla/5.0"})
+        except requests.RequestException:
+            continue
+        soup = BeautifulSoup(search_text, "html.parser")
+        links: list[str] = []
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            if not href.startswith("https://picjumbo.com/"):
+                continue
+            if any(skip in href for skip in ["/premium", "/free-images/", "/free-photos/", "/search/", "/wp-content/", "#", "/page/", "/resources", "/about-", "/faq", "/news", "/download"]):
+                continue
+            if not re.match(r"https://picjumbo\.com/[^/?#]+/$", href):
+                continue
+            if href not in seen_pages:
+                seen_pages.add(href)
+                links.append(href)
+        for source_url in links:
+            if emitted >= limit:
+                break
+            try:
+                page_text = request_text(session, source_url, headers={"User-Agent": "Mozilla/5.0"})
+            except requests.RequestException:
+                continue
+            soup = BeautifulSoup(page_text, "html.parser")
+            title = soup.title.string.strip() if soup.title and soup.title.string else ""
+            image_url = ""
+            meta = soup.select_one('meta[property="og:image"]')
+            if meta and meta.get("content"):
+                image_url = html.unescape(meta["content"].strip())
+            if not image_url or "istockphoto.com" in image_url:
+                continue
+            emitted += 1
+            yield Candidate(
+                source_type="web",
+                source_platform="picjumbo",
+                source_url=source_url,
+                source_image_url=image_url,
+                query=query,
+                title=title,
+                author="picjumbo",
+                license_type="picjumbo-free",
+                license_url="https://picjumbo.com/faq-and-terms/",
+                notes="picjumbo public photo page; large og:image URL extracted from original source page",
+            )
+
+
+def provider_isorepublic_web(session: requests.Session, query: str, limit: int) -> Iterator[Candidate]:
+    emitted = 0
+    seen_pages: set[str] = set()
+    page = 1
+    while emitted < limit and page <= 5:
+        try:
+            search_text = request_text(
+                session,
+                "https://isorepublic.com/",
+                params={"s": query, "paged": page} if page > 1 else {"s": query},
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+        except requests.RequestException:
+            break
+        soup = BeautifulSoup(search_text, "html.parser")
+        links: list[str] = []
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            if re.match(r"https://isorepublic\.com/photo/[^/?#]+/$", href) and href not in seen_pages:
+                seen_pages.add(href)
+                links.append(href)
+        if not links:
+            break
+        page_emitted = 0
+        for source_url in links:
+            if emitted >= limit:
+                break
+            try:
+                page_text = request_text(session, source_url, headers={"User-Agent": "Mozilla/5.0"})
+            except requests.RequestException:
+                continue
+            soup = BeautifulSoup(page_text, "html.parser")
+            title = soup.title.string.strip() if soup.title and soup.title.string else ""
+            image_url = ""
+            for a in soup.find_all("a", href=True):
+                href = a["href"]
+                if "wp-content/uploads" in href and re.search(r"\.(?:jpg|jpeg|png|webp)$", href, re.IGNORECASE):
+                    image_url = href
+                    break
+            if not image_url:
+                meta = soup.select_one('meta[property="og:image"]')
+                image_url = meta["content"].strip() if meta and meta.get("content") else ""
+            if not image_url:
+                continue
+            emitted += 1
+            page_emitted += 1
+            yield Candidate(
+                source_type="web",
+                source_platform="isorepublic",
+                source_url=source_url,
+                source_image_url=image_url,
+                query=query,
+                title=title,
+                author="ISO Republic",
+                license_type="cc0",
+                license_url="https://isorepublic.com/license/",
+                notes="ISO Republic public photo page; download image URL extracted from original source page",
+            )
+        if page_emitted == 0:
+            break
+        page += 1
+
+
+def provider_simple_stock_web(
+    session: requests.Session,
+    query: str,
+    limit: int,
+    *,
+    platform: str,
+    search_url: str,
+    page_rx: str,
+    license_type: str,
+    license_url: str,
+    author: str,
+) -> Iterator[Candidate]:
+    emitted = 0
+    seen_pages: set[str] = set()
+    try:
+        search_text = request_text(session, search_url, headers={"User-Agent": "Mozilla/5.0"})
+    except requests.RequestException:
+        return
+    soup = BeautifulSoup(search_text, "html.parser")
+    links: list[str] = []
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        if re.match(page_rx, href) and href not in seen_pages:
+            seen_pages.add(href)
+            links.append(href)
+    for source_url in links:
+        if emitted >= limit:
+            break
+        try:
+            page_text = request_text(session, source_url, headers={"User-Agent": "Mozilla/5.0"})
+        except requests.RequestException:
+            continue
+        soup = BeautifulSoup(page_text, "html.parser")
+        title = soup.title.string.strip() if soup.title and soup.title.string else ""
+        image_url = ""
+        for a in soup.find_all("a", href=True):
+            label = a.get_text(" ", strip=True).lower()
+            href = a["href"]
+            if "download" in label and re.search(r"\.(?:jpg|jpeg|png|webp)$", href, re.IGNORECASE):
+                image_url = href
+                break
+        if not image_url:
+            meta = soup.select_one('meta[property="og:image"]') or soup.select_one('meta[name="twitter:image"]')
+            image_url = meta["content"].strip() if meta and meta.get("content") else ""
+        if not image_url:
+            continue
+        emitted += 1
+        yield Candidate(
+            source_type="web",
+            source_platform=platform,
+            source_url=source_url,
+            source_image_url=image_url,
+            query=query,
+            title=title,
+            author=author,
+            license_type=license_type,
+            license_url=license_url,
+            notes=f"{author} public photo page; image URL extracted from original source page",
+        )
+
+
+def provider_negativespace_web(session: requests.Session, query: str, limit: int) -> Iterator[Candidate]:
+    return provider_simple_stock_web(
+        session,
+        query,
+        limit,
+        platform="negativespace",
+        search_url=f"https://negativespace.co/?s={quote(query)}",
+        page_rx=r"https://negativespace\.co/[^/?#]+/$",
+        license_type="cc0",
+        license_url="https://negativespace.co/license/",
+        author="NegativeSpace",
+    )
+
+
+def provider_picography_web(session: requests.Session, query: str, limit: int) -> Iterator[Candidate]:
+    return provider_simple_stock_web(
+        session,
+        query,
+        limit,
+        platform="picography",
+        search_url=f"https://picography.co/search/{quote(query)}",
+        page_rx=r"https://picography\.co/[^/?#]+/$",
+        license_type="picography-free",
+        license_url="https://picography.co/terms/",
+        author="Picography",
+    )
+
+
+def provider_freestocks_web(session: requests.Session, query: str, limit: int) -> Iterator[Candidate]:
+    return provider_simple_stock_web(
+        session,
+        query,
+        limit,
+        platform="freestocks",
+        search_url=f"https://freestocks.org/search/{quote(query)}?cat=",
+        page_rx=r"https://freestocks\.org/photo/[^/?#]+/$",
+        license_type="freestocks-free",
+        license_url="https://freestocks.org/terms-of-use/",
+        author="freestocks.org",
+    )
+
+
+def provider_startupstockphotos_web(session: requests.Session, query: str, limit: int) -> Iterator[Candidate]:
+    emitted = 0
+    seen_pages: set[str] = set()
+    links: list[str] = []
+
+    for page in range(1, 5):
+        try:
+            data = request_json(
+                session,
+                "https://startupstockphotos.com/wp-json/wp/v2/posts",
+                params={"per_page": min(50, max(10, limit)), "search": query, "page": page},
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+        except requests.RequestException:
+            break
+        if not data:
+            break
+        for item in data:
+            href = item.get("link") or ""
+            if re.match(r"https://startupstockphotos\.com/photos/[^/?#]+/$", href) and href not in seen_pages:
+                seen_pages.add(href)
+                links.append(href)
+        if len(data) < min(50, max(10, limit)):
+            break
+
+    for search_url in [f"https://startupstockphotos.com/search/{quote(query)}/", "https://startupstockphotos.com/"]:
+        try:
+            search_text = request_text(session, search_url, headers={"User-Agent": "Mozilla/5.0"})
+        except requests.RequestException:
+            continue
+        for href in re.findall(r'https://startupstockphotos\.com/photos/[^"\'<>\s]+/', search_text):
+            if href not in seen_pages:
+                seen_pages.add(href)
+                links.append(href)
+
+    for source_url in links:
+        if emitted >= limit:
+            break
+        try:
+            page_text = request_text(session, source_url, headers={"User-Agent": "Mozilla/5.0"})
+        except requests.RequestException:
+            continue
+        soup = BeautifulSoup(page_text, "html.parser")
+        title = ""
+        meta_title = soup.select_one('meta[property="og:title"]')
+        if meta_title and meta_title.get("content"):
+            title = html.unescape(meta_title["content"].strip())
+        if not title and soup.title and soup.title.string:
+            title = soup.title.string.strip()
+
+        image_url = ""
+        content_match = re.search(r'"contentUrl"\s*:\s*"(https://startupstockphotos\.com/wp-content/uploads/[^"]+\.jpe?g)"', page_text)
+        if content_match:
+            image_url = html.unescape(content_match.group(1))
+        if not image_url:
+            download = soup.select_one("a.download[href]")
+            image_url = download["href"].strip() if download else ""
+        if not image_url:
+            meta = soup.select_one('meta[property="og:image"]')
+            image_url = meta["content"].strip() if meta and meta.get("content") else ""
+        if not image_url or "istockphoto" in image_url:
+            continue
+
+        emitted += 1
+        yield Candidate(
+            source_type="web",
+            source_platform="startupstockphotos",
+            source_url=source_url,
+            source_image_url=image_url,
+            query=query,
+            title=strip_html(title),
+            author="Startup Stock Photos",
+            license_type="cc0",
+            license_url="https://startupstockphotos.com/terms/",
+            notes="Startup Stock Photos public photo page; full-size contentUrl/download URL extracted from original source page",
+        )
+
+
+def provider_skitterphoto_web(session: requests.Session, query: str, limit: int) -> Iterator[Candidate]:
+    emitted = 0
+    seen_pages: set[str] = set()
+    category_map = {
+        "food": "food",
+        "dining": "food",
+        "table": "food",
+        "plate": "food",
+        "coffee": "food",
+        "desk": "technology",
+        "laptop": "technology",
+        "computer": "technology",
+        "keyboard": "technology",
+        "workbench": "industry",
+        "tools": "industry",
+    }
+    categories = []
+    lowered_query = query.lower()
+    for word, category in category_map.items():
+        if word in lowered_query and category not in categories:
+            categories.append(category)
+    categories.extend(c for c in ["food", "technology", "business-finance", "industry"] if c not in categories)
+
+    search_urls = [f"https://skitterphoto.com/photos/search/{quote(query)}"]
+    search_urls.extend(f"https://skitterphoto.com/photos/categories/{category}" for category in categories[:4])
+    links: list[str] = []
+    for search_url in search_urls:
+        if len(links) >= max(limit * 3, limit):
+            break
+        try:
+            search_text = request_text(session, search_url, headers={"User-Agent": "Mozilla/5.0"})
+        except requests.RequestException:
+            continue
+        for href in re.findall(r"https://skitterphoto\.com/photos/\d+/[^\"'<>\\s]+", search_text):
+            href = href.rstrip("/")
+            if href not in seen_pages:
+                seen_pages.add(href)
+                links.append(href)
+
+    for source_url in links:
+        if emitted >= limit:
+            break
+        try:
+            page_text = request_text(session, source_url, headers={"User-Agent": "Mozilla/5.0"})
+        except requests.RequestException:
+            continue
+        soup = BeautifulSoup(page_text, "html.parser")
+        title = ""
+        meta_title = soup.select_one('meta[property="og:title"]')
+        if meta_title and meta_title.get("content"):
+            title = html.unescape(meta_title["content"].strip())
+        if not title and soup.title and soup.title.string:
+            title = soup.title.string.strip()
+        image_url = ""
+        meta = soup.select_one('meta[property="og:image"]')
+        if meta and meta.get("content"):
+            image_url = html.unescape(meta["content"].strip())
+        if not image_url:
+            img = soup.select_one("figure.photo img[data-src]")
+            image_url = img["data-src"].strip() if img else ""
+        if not image_url or "thumbnail" in image_url.lower() or "avatar" in image_url.lower():
+            continue
+        author = ""
+        author_meta = soup.select_one('meta[itemprop="name"]')
+        if author_meta and author_meta.get("content"):
+            author = author_meta["content"].strip()
+        emitted += 1
+        yield Candidate(
+            source_type="web",
+            source_platform="skitterphoto",
+            source_url=source_url,
+            source_image_url=image_url,
+            query=query,
+            title=strip_html(title),
+            author=author or "Skitterphoto",
+            license_type="cc0",
+            license_url="https://skitterphoto.com/license",
+            notes="Skitterphoto public photo page; full-size default image URL extracted from original source page",
+        )
 
 
 def provider_openverse(session: requests.Session, query: str, limit: int) -> Iterator[Candidate]:
@@ -910,6 +1567,17 @@ def collect(args: argparse.Namespace) -> int:
         "wikimedia": lambda: provider_wikimedia(session, args.query, args.limit),
         "openverse": lambda: provider_openverse(session, args.query, args.limit),
         "duckduckgo_web": lambda: provider_duckduckgo_web(session, args.query, args.limit),
+        "pxhere_web": lambda: provider_pxhere_web(session, args.query, args.limit),
+        "foodiesfeed_web": lambda: provider_foodiesfeed_web(session, args.query, args.limit),
+        "libreshot_web": lambda: provider_libreshot_web(session, args.query, args.limit),
+        "freeimages_uk_web": lambda: provider_freeimages_uk_web(session, args.query, args.limit),
+        "picjumbo_web": lambda: provider_picjumbo_web(session, args.query, args.limit),
+        "isorepublic_web": lambda: provider_isorepublic_web(session, args.query, args.limit),
+        "negativespace_web": lambda: provider_negativespace_web(session, args.query, args.limit),
+        "picography_web": lambda: provider_picography_web(session, args.query, args.limit),
+        "freestocks_web": lambda: provider_freestocks_web(session, args.query, args.limit),
+        "startupstockphotos_web": lambda: provider_startupstockphotos_web(session, args.query, args.limit),
+        "skitterphoto_web": lambda: provider_skitterphoto_web(session, args.query, args.limit),
         "flickr": lambda: provider_flickr(session, args.query, args.limit),
         "flickr_web": lambda: provider_flickr_web(session, args.query, args.limit),
         "unsplash": lambda: provider_unsplash(session, args.query, args.limit),
@@ -1071,7 +1739,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     collect_parser = sub.add_parser("collect", help="collect candidate images")
-    collect_parser.add_argument("--provider", required=True, choices=["wikimedia", "openverse", "duckduckgo_web", "flickr", "flickr_web", "unsplash", "pexels", "pixabay", "shopify_burst", "urls"])
+    collect_parser.add_argument("--provider", required=True, choices=["wikimedia", "openverse", "duckduckgo_web", "pxhere_web", "foodiesfeed_web", "libreshot_web", "freeimages_uk_web", "picjumbo_web", "isorepublic_web", "negativespace_web", "picography_web", "freestocks_web", "startupstockphotos_web", "skitterphoto_web", "flickr", "flickr_web", "unsplash", "pexels", "pixabay", "shopify_burst", "urls"])
     collect_parser.add_argument("--query", default="", help="search query for API providers")
     collect_parser.add_argument("--url-list", default="", help="text file of source URLs for provider=urls")
     collect_parser.add_argument("--limit", type=int, default=50)
