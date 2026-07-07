@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parent
 CRAWLER = ROOT / "desktop-scene-crawler" / "scripts" / "desktop_scene_crawler.py"
 PYTHON = ROOT / ".venv" / "bin" / "python"
 STOP_FILE = ROOT / "STOP_CRAWL"
+KNOWN_SOURCE_URLS = ROOT / "known_source_urls.csv"
 
 QUERIES = [
     "书桌日常 咖啡 笔记本 site:douban.com/group/topic",
@@ -195,6 +196,10 @@ def main() -> int:
     parser.add_argument("--provider-timeout", type=int, default=120)
     args = parser.parse_args()
 
+    exclude_manifests = list(args.exclude_manifest)
+    if KNOWN_SOURCE_URLS.exists() and str(KNOWN_SOURCE_URLS) not in exclude_manifests:
+        exclude_manifests.append(str(KNOWN_SOURCE_URLS))
+
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     log_path = output_dir / "crawl.log"
@@ -233,7 +238,7 @@ def main() -> int:
                     "--output-dir",
                     str(output_dir),
                 ]
-                for exclude_manifest in args.exclude_manifest:
+                for exclude_manifest in exclude_manifests:
                     cmd.extend(["--exclude-manifest", exclude_manifest])
                 cmd.extend(["--sleep", str(args.sleep_between_candidates)])
                 log(f"cycle={cycle} provider={provider} query={query!r} before_total={total} before_kept={kept}", log_path)
