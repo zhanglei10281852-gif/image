@@ -67,9 +67,17 @@ GITHUB_DEDUPE_REPO=owner/repo npm run dev:server
 
 页面里的“来源库/采集”可以直接启动后端采集任务。建议每次先抓 10-50 条，确认质量后再扩大。采集完成后会自动同步进 SQLite，并按 `normalized_source_url` 和 `source_image_url` 去重。
 
-需要 API Key 的来源会在前端置灰；免 Key 且已有 provider 的来源可以直接使用。
+新采集任务默认不再保存图片文件到本地，只读取远程原图 URL 来校验尺寸，并在前端直接用 `source_image_url` 展示。旧任务已经下载到本地的图片仍可继续显示；如果某些站点防盗链导致远程图无法显示，再单独切回下载或增加图片代理。
 
-当前可直采图库/网页包括 Wikimedia Commons、Flickr CC、Openverse、Skitterphoto、Shopify Burst、Freestocks、Picjumbo、ISO Republic、PxHere、FreeImages UK、NegativeSpace、Startup Stock Photos、Foodiesfeed、Picography、LibreShot、国内公开图文网页发现等。
+需要 API Key 的来源默认不显示，避免误点后失败；如果启动后端前配置了对应环境变量，来源会自动出现在下拉框并允许调用：
+
+```bash
+PEXELS_API_KEY=你的key npm run dev:server
+PIXABAY_API_KEY=你的key npm run dev:server
+UNSPLASH_ACCESS_KEY=你的key npm run dev:server
+```
+
+当前可直采图库/网页包括 Wikimedia Commons、Flickr CC、Openverse、Skitterphoto、Shopify Burst、Freestocks、Picjumbo、ISO Republic、PxHere、FreeImages UK、NegativeSpace、Startup Stock Photos、Good Stock Photos、ShotStash、Foodiesfeed、Picography、LibreShot、国内公开图文网页发现等。
 
 关键词建议：国内公开网页源优先中文关键词，建议使用“场景词 + 物体词 + 生活化词”，例如 `书桌 日常 桌面`、`餐桌 摆盘 家常`、`厨房 台面 食材`。海外图库优先英文关键词，例如 `desk coffee laptop`、`dining table breakfast`、`kitchen counter ingredients`。
 

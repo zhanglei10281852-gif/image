@@ -66,14 +66,29 @@ body {
   min-height: 280px;
 }
 
+.list-scroll-anchor {
+  scroll-margin-top: 12px;
+}
+
 .image-card {
   height: 100%;
   border-color: #e1e5ec;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
   transition:
     border-color 0.2s ease,
     box-shadow 0.2s ease,
     transform 0.2s ease;
+}
+
+.image-card .ant-card-cover {
+  flex: 0 0 auto;
+}
+
+.image-card .ant-card-body {
+  flex: 1;
+  display: flex;
 }
 
 .image-card:hover {
@@ -91,13 +106,30 @@ body {
   width: 100%;
   aspect-ratio: 4 / 3;
   overflow: hidden;
-  background: #eef1f5;
+  background: #f1f4f8;
 }
 
-.record-image {
+.image-frame .ant-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-frame .ant-image-img.record-image {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain !important;
+  object-position: center center;
+  display: block;
+}
+
+.image-frame.portrait .ant-image {
+  width: 72%;
+  margin: 0 auto;
 }
 
 .card-check {
@@ -112,11 +144,26 @@ body {
 
 .card-meta {
   width: 100%;
+  min-height: 154px;
+  justify-content: space-between;
 }
 
 .card-line {
   display: block;
   font-size: 12px;
+}
+
+.card-tags {
+  min-height: 50px;
+  align-content: flex-start;
+}
+
+.card-title-row {
+  min-height: 24px;
+}
+
+.card-footer-row {
+  min-height: 24px;
 }
 
 .pager-wrap {
@@ -141,6 +188,14 @@ body {
 .source-panel,
 .source-control,
 .admin-panel {
+  width: 100%;
+}
+
+.source-control > .ant-space-item,
+.source-control .ant-select,
+.source-control .ant-input,
+.source-control .ant-input-number,
+.source-control .ant-btn {
   width: 100%;
 }
 
@@ -195,20 +250,39 @@ body {
   white-space: normal;
 }
 
-.keyword-hint {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
+.crawl-limit-input {
+  width: 100%;
 }
 
 .job-list {
   width: 100%;
+  max-height: 520px;
   margin-top: 10px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .job-card {
   border-color: #e7eaf0;
+}
+
+.job-content {
+  width: 100%;
+  min-width: 0;
+}
+
+.job-log {
+  max-height: 92px;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  border: 1px solid #edf0f5;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #4b5563;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 .admin-section {

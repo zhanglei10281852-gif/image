@@ -16,6 +16,7 @@ import {
   Layout,
   Modal,
   Pagination,
+  Progress,
   Row,
   Select,
   Space,
@@ -120,6 +121,13 @@ type SourceItem = {
 
 type SourceCatalogResponse = {
   sources: SourceItem[];
+  counts?: {
+    total: number;
+    noKey: number;
+    direct: number;
+    directNoKey: number;
+    promptOnly: number;
+  };
   tiers: { value: string; label: string; description: string }[];
   taskTypes: string[];
 };
@@ -135,8 +143,10 @@ type CrawlJob = {
   kept: number;
   flagged: number;
   duplicates_skipped: number;
+  progress_processed: number;
   imported: number;
   skipped_duplicates: number;
+  last_progress_at: string;
   error: string;
   log: string;
 };
@@ -175,9 +185,9 @@ function App() {
   const [adminDrawerOpen, setAdminDrawerOpen] = useState(false);
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
   const [sourceCatalog, setSourceCatalog] = useState<SourceCatalogResponse | null>(null);
-  const [crawlProvider, setCrawlProvider] = useState<string>();
+  const [crawlProviders, setCrawlProviders] = useState<string[]>([]);
   const [crawlQuery, setCrawlQuery] = useState("desk coffee laptop");
-  const [crawlLimit, setCrawlLimit] = useState(20);
+  const [crawlLimit, setCrawlLimit] = useState<number | null>(20);
   const [crawlStarting, setCrawlStarting] = useState(false);
   const [crawlJobs, setCrawlJobs] = useState<CrawlJob[]>([]);
   const [cancelingJobId, setCancelingJobId] = useState<string>();
@@ -196,7 +206,9 @@ function App() {
   const [messageApi, contextHolder] = message.useMessage();
   const [modalApi, modalContextHolder] = Modal.useModal();
   const dedupeInputRef = useRef<HTMLInputElement>(null);
+  const listAnchorRef = useRef<HTMLDivElement>(null);
   const jobStatusRef = useRef<Map<string, string>>(new Map());
+  const jobImportedRef = useRef<Map<string, number>>(new Map());
   const jobPollReadyRef = useRef(false);
 
   useEffect(() => {
@@ -214,7 +226,8 @@ function App() {
       .then((res) => res.json())
       .then((data: SourceCatalogResponse) => {
         setSourceCatalog(data);
-        setCrawlProvider(data.sources.find((source) => source.directCrawl)?.provider);
+        const firstDirect = data.sources.find((source) => source.directCrawl);
+        if (firstDirect) setCrawlProviders([firstDirect.provider]);
       })
       .catch((error) => messageApi.error(error.message || "加载来源库失败"));
   }, [messageApi]);
@@ -263,6 +276,12 @@ function App() {
     [meta?.fields, selectedFields]
   );
 
+  const scrollRecordsToTop = () => {
+    window.requestAnimationFrame(() => {
+      listAnchorRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
+    });
+  };
+
   const groupedFields = useMemo(() => {
     const groups = new Map<string, FieldDef[]>();
     for (const field of meta?.fields || []) {
@@ -273,15 +292,21 @@ function App() {
     return [...groups.entries()];
   }, [meta?.fields]);
 
-  const crawlPrompt = useMemo(() => {
-    const source = (sourceCatalog?.sources || []).find((item) => item.provider === crawlProvider);
-    return `请按以下参数采集图片数据：\n\n网站：${source?.name || crawlProvider || "未选择"}\nprovider：${crawlProvider || "未选择"}\n关键词：${crawlQuery || "未填写"}\n目标数量：${crawlLimit}\n\n要求：\n1. 必须是真实照片，拒绝 AI、3D 渲染、插画、白底商品主图。\n2. 必须保留原始来源页 URL 和原图 URL，不使用搜索缩略图。\n3. 入库前按 normalized_source_url 和 source_image_url 去重。\n4. 字段保留 source_url、source_image_url、scene_setting、license、尺寸、risk_flag、notes。\n5. 新数据写入 SQLite，默认未导出列表显示；用户选择后再导出 Excel。`;
-  }, [crawlLimit, crawlProvider, crawlQuery, sourceCatalog?.sources]);
-
-  const selectedSource = useMemo(
-    () => (sourceCatalog?.sources || []).find((item) => item.provider === crawlProvider),
-    [crawlProvider, sourceCatalog?.sources]
+  const directCrawlSources = useMemo(
+    () => (sourceCatalog?.sources || []).filter((source) => source.directCrawl),
+    [sourceCatalog?.sources]
   );
+
+  const selectedSources = useMemo(
+    () => (sourceCatalog?.sources || []).filter((item) => crawlProviders.includes(item.provider)),
+    [crawlProviders, sourceCatalog?.sources]
+  );
+
+  const crawlPrompt = useMemo(() => {
+    const names = selectedSources.map((source) => source.name).join("、") || "未选择";
+    const providers = crawlProviders.join(", ") || "未选择";
+    return `请按以下参数采集图片数据：\n\n网站：${names}\nprovider：${providers}\n关键词：${crawlQuery || "未填写"}\n目标数量：${crawlLimit || "未填写"}（每个网站各采集该数量）\n\n要求：\n1. 必须是真实照片，拒绝 AI、3D 渲染、插画、白底商品主图。\n2. 必须保留原始来源页 URL 和原图 URL，不使用搜索缩略图。\n3. 入库前按 normalized_source_url 和 source_image_url 去重。\n4. 字段保留 source_url、source_image_url、scene_setting、license、尺寸、risk_flag、notes。\n5. 新数据写入 SQLite，默认未导出列表显示；用户选择后再导出 Excel。`;
+  }, [crawlLimit, crawlProviders, crawlQuery, selectedSources]);
 
   const copyText = async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -296,6 +321,7 @@ function App() {
       setCrawlJobs(jobs);
 
       const previous = jobStatusRef.current;
+      const previousImported = jobImportedRef.current;
       const finishedJobs = jobs.filter((job) => {
         const oldStatus = previous.get(job.job_id);
         return (
@@ -305,8 +331,19 @@ function App() {
           ["completed", "failed"].includes(job.status)
         );
       });
+      const importedIncreased = jobs.some((job) => {
+        const currentImported = Number(job.imported || 0);
+        const oldImported = previousImported.get(job.job_id) || 0;
+        return jobPollReadyRef.current && currentImported > oldImported;
+      });
       jobStatusRef.current = new Map(jobs.map((job) => [job.job_id, job.status]));
+      jobImportedRef.current = new Map(jobs.map((job) => [job.job_id, Number(job.imported || 0)]));
       jobPollReadyRef.current = true;
+
+      if (importedIncreased) {
+        setSelectedIds([]);
+        setRefreshKey((value) => value + 1);
+      }
 
       if (finishedJobs.length) {
         const imported = finishedJobs.reduce((sum, job) => sum + Number(job.imported || 0), 0);
@@ -335,12 +372,17 @@ function App() {
   };
 
   const startCrawl = async () => {
-    if (!crawlProvider) {
-      messageApi.warning("请选择支持直接采集的网站");
+    if (!crawlProviders.length) {
+      messageApi.warning("请选择至少一个支持直接采集的网站");
       return;
     }
     if (!crawlQuery.trim()) {
       messageApi.warning("请输入关键词");
+      return;
+    }
+    const limitValue = Number(crawlLimit);
+    if (!Number.isFinite(limitValue) || limitValue <= 0) {
+      messageApi.warning("请输入大于 0 的采集数量");
       return;
     }
     setCrawlStarting(true);
@@ -348,11 +390,11 @@ function App() {
       const res = await fetch("/api/crawl/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: crawlProvider, query: crawlQuery.trim(), limit: crawlLimit })
+        body: JSON.stringify({ providers: crawlProviders, query: crawlQuery.trim(), limit: Math.floor(limitValue) })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "启动采集失败");
-      messageApi.success("采集任务已启动");
+      messageApi.success(`已启动 ${data.jobIds?.length || crawlProviders.length} 个采集任务`);
       await loadCrawlJobs();
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "启动采集失败");
@@ -376,6 +418,19 @@ function App() {
     }
   };
 
+  const deleteRecords = async (ids: string[]) => {
+    const res = await fetch("/api/records", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ selectedIds: ids })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || "删除失败");
+    setSelectedIds((current) => current.filter((id) => !ids.includes(id)));
+    setRefreshKey((value) => value + 1);
+    messageApi.success(`已删除 ${data.deleted || 0} 条`);
+  };
+
   const deleteSelected = () => {
     if (!selectedIds.length) {
       messageApi.warning("请先选择记录");
@@ -388,16 +443,7 @@ function App() {
       okButtonProps: { danger: true },
       cancelText: "取消",
       async onOk() {
-        const res = await fetch("/api/records", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ selectedIds })
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.message || "删除失败");
-        setSelectedIds([]);
-        setRefreshKey((value) => value + 1);
-        messageApi.success(`已删除 ${data.deleted || 0} 条`);
+        await deleteRecords(selectedIds);
       }
     });
   };
@@ -769,6 +815,8 @@ function App() {
             </Flex>
           </section>
 
+          <div ref={listAnchorRef} className="list-scroll-anchor" />
+
           <Spin spinning={loading}>
             {records.length ? (
               <Row gutter={[14, 14]} className="image-grid">
@@ -778,7 +826,7 @@ function App() {
                       className={selectedSet.has(record.id) ? "image-card selected" : "image-card"}
                       styles={{ body: { padding: 10 } }}
                       cover={
-                        <div className="image-frame">
+                        <div className={Number(record.height) > Number(record.width) * 1.2 ? "image-frame portrait" : "image-frame"}>
                           <Image
                             src={record.image_api_url}
                             alt={record.title || record.record_id}
@@ -794,13 +842,13 @@ function App() {
                       }
                     >
                       <Space direction="vertical" size={7} className="card-meta">
-                        <Flex align="center" justify="space-between" gap={8}>
+                        <Flex align="center" justify="space-between" gap={8} className="card-title-row">
                           <Text strong ellipsis={{ tooltip: record.title }}>
                             {record.title || record.id}
                           </Text>
                           <Badge status={record.risk_flag ? "error" : "success"} />
                         </Flex>
-                        <Space size={[4, 4]} wrap>
+                        <Space size={[4, 4]} wrap className="card-tags">
                           <Tag color="blue">{record.source_platform || "unknown"}</Tag>
                           <Tag>{record.scene_cn || record.scene_setting || "未标注"}</Tag>
                           <Tag>{record.complexity_level || "L2"}</Tag>
@@ -809,11 +857,14 @@ function App() {
                         <Text type="secondary" className="card-line">
                           {record.width} x {record.height} · 短边 {record.short_edge}
                         </Text>
-                        <Flex justify="space-between" gap={8}>
+                        <Flex justify="space-between" gap={8} align="center" className="card-footer-row">
                           <Link href={record.source_url} target="_blank">
                             来源
                           </Link>
-                          <Text type="secondary">#{record.row_number}</Text>
+                          <Space size={4}>
+                            <Text type="secondary">#{record.row_number}</Text>
+                            <Button danger type="text" size="small" icon={<DeleteOutlined />} onClick={() => deleteRecords([record.id])} />
+                          </Space>
                         </Flex>
                       </Space>
                     </Card>
@@ -835,6 +886,7 @@ function App() {
               onChange={(nextPage, nextPageSize) => {
                 setPage(nextPage);
                 setPageSize(nextPageSize);
+                scrollRecordsToTop();
               }}
             />
           </Flex>
@@ -1027,16 +1079,36 @@ function App() {
         >
           <Space direction="vertical" size={16} className="source-panel">
             <div className="hint-box">
-              采集会在后端后台运行，并写入本地 SQLite。数据库按来源页 URL 和图片 URL 去重；导出过的记录默认不显示。国内公开网页源优先中文关键词，海外图库优先英文关键词；采集数量不设上限，长任务可随时终止。
+              采集会在后端后台运行，并写入本地 SQLite。数据库按来源页 URL 和图片 URL 去重；导出过的记录默认不显示。多选网站时共用同一个关键词；数量按单个网站计算。国内公开网页源优先中文关键词，海外图库优先英文关键词；采集数量不设上限，长任务可随时终止。
             </div>
+            <Space size={[8, 8]} wrap>
+              <Tag color="green">后端可直采免 Key：{sourceCatalog?.counts?.directNoKey ?? directCrawlSources.filter((source) => !source.requiresApiKey).length}</Tag>
+              <Tag>可直采总数：{sourceCatalog?.counts?.direct ?? directCrawlSources.length}</Tag>
+              <Tag>来源库总数：{sourceCatalog?.counts?.total ?? sourceCatalog?.sources.length ?? 0}</Tag>
+            </Space>
             <Row gutter={[12, 12]}>
               <Col xs={24} md={12}>
                 <Space direction="vertical" size={10} className="source-control">
                   <Text strong>网站</Text>
+                  <Space wrap>
+                    <Button size="small" onClick={() => setCrawlProviders(directCrawlSources.map((source) => source.provider))}>
+                      一键全选
+                    </Button>
+                    <Button size="small" onClick={() => setCrawlProviders([])}>
+                      清空
+                    </Button>
+                  </Space>
                   <Select
-                    value={crawlProvider}
-                    options={(sourceCatalog?.sources || []).map((source) => ({
+                    mode="multiple"
+                    value={crawlProviders}
+                    maxTagCount="responsive"
+                    showSearch
+                    optionFilterProp="searchText"
+                    placeholder="可多选：每个网站各采集一次"
+                    options={directCrawlSources.map((source) => ({
                       value: source.provider,
+                      title: source.name,
+                      searchText: `${source.name} ${source.provider} ${(source.promptKeywords || []).join(" ")}`,
                       label: (
                         <div className="source-option">
                           <Flex justify="space-between" gap={8}>
@@ -1046,60 +1118,66 @@ function App() {
                           <Text type="secondary" className="source-option-keywords">
                             {source.supportsChineseSearch ? "中文优先" : "英文优先"} · {(source.promptKeywords || []).slice(0, 3).join(" / ")}
                           </Text>
-                          {!source.directCrawl ? (
-                            <Text type="secondary" className="source-option-keywords">
-                              {source.disabledReason || source.crawlStatus}
-                            </Text>
-                          ) : null}
                         </div>
-                      ),
-                      disabled: !source.directCrawl
+                      )
                     }))}
-                    optionLabelProp="label"
-                    onChange={(value) => {
-                      setCrawlProvider(value);
-                      const source = (sourceCatalog?.sources || []).find((item) => item.provider === value);
-                      if (source?.promptKeywords?.[0]) setCrawlQuery(source.promptKeywords[0]);
+                    optionLabelProp="title"
+                    onChange={(values) => {
+                      setCrawlProviders(values);
+                      const source = directCrawlSources.find((item) => item.provider === values[values.length - 1]);
+                      if (values.length === 1 && source?.promptKeywords?.[0]) setCrawlQuery(source.promptKeywords[0]);
                     }}
                   />
                   <Text strong>关键词</Text>
                   <Input value={crawlQuery} onChange={(event) => setCrawlQuery(event.target.value)} placeholder="desk coffee laptop" />
-                  {selectedSource ? (
-                    <div className="keyword-hint">
-                      <Tag color={selectedSource.supportsChineseSearch ? "purple" : "blue"}>
-                        {selectedSource.supportsChineseSearch ? "中文优先" : "英文优先"}
-                      </Tag>
-                      {(selectedSource.promptKeywords || []).slice(0, 4).map((keyword) => (
-                        <Button size="small" key={keyword} onClick={() => setCrawlQuery(keyword)}>
-                          {keyword}
-                        </Button>
-                      ))}
-                    </div>
-                  ) : null}
+                  <Text type="secondary">所有已选网站共用这一个关键词；下面推荐词点选后会替换到同一个输入框。</Text>
                   <Text strong>数量</Text>
-                  <InputNumber min={1} value={crawlLimit} onChange={(value) => setCrawlLimit(Number(value || 20))} />
+                  <InputNumber
+                    value={crawlLimit}
+                    precision={0}
+                    className="crawl-limit-input"
+                    onChange={(value) => setCrawlLimit(typeof value === "number" ? value : null)}
+                    placeholder="不设上限，填目标数量"
+                  />
                   <Button type="primary" icon={<PlayCircleOutlined />} loading={crawlStarting} onClick={startCrawl}>
-                    开始采集
+                    开始采集{crawlProviders.length > 1 ? `（${crawlProviders.length} 个站）` : ""}
                   </Button>
+                  <Text type="secondary">
+                    采集下拉只显示后端确认可直采的免 Key/已配置来源；下面来源库里“仅提示词”的站不会混入这里。当前可直采免 Key {sourceCatalog?.counts?.directNoKey ?? directCrawlSources.filter((source) => !source.requiresApiKey).length} 个。
+                  </Text>
                 </Space>
               </Col>
               <Col xs={24} md={12}>
                 <Text strong>最近任务</Text>
                 <Space direction="vertical" size={8} className="job-list">
                   {crawlJobs.length ? (
-                    crawlJobs.slice(0, 6).map((job) => (
+                    crawlJobs.map((job) => (
                       <Card size="small" key={job.job_id} className="job-card">
                         <Flex justify="space-between" gap={8}>
-                          <Space direction="vertical" size={3}>
+                          <Space direction="vertical" size={6} className="job-content">
                             <Space wrap>
                               <Tag color={jobStatusColor(job.status)}>{job.status}</Tag>
                               <Text strong>{job.provider}</Text>
                               <Text type="secondary">{job.query}</Text>
                             </Space>
+                            <Progress
+                              size="small"
+                              percent={jobProgressPercent(job)}
+                              status={job.status === "failed" ? "exception" : job.status === "completed" ? "success" : "active"}
+                            />
                             <Text type="secondary">
-                              目标 {job.limit_count} · kept {job.kept || 0} · imported {job.imported || 0} · 去重 {job.skipped_duplicates || job.duplicates_skipped || 0}
+                              已处理 {job.progress_processed || 0}/{job.limit_count} · 保留 {job.kept || 0} · 风险 {job.flagged || 0} ·
+                              采集重复 {job.duplicates_skipped || 0} · 入库 {job.imported || 0} · 入库去重 {job.skipped_duplicates || 0}
+                            </Text>
+                            <Text type="secondary">
+                              {job.status === "completed"
+                                ? "已完成"
+                                : job.last_progress_at
+                                  ? `最后进度 ${formatRemoteTime(job.last_progress_at)}`
+                                  : "等待采集器返回进度"}
                             </Text>
                             {job.error ? <Text type="danger">{job.error}</Text> : null}
+                            {job.log ? <pre className="job-log">{tailLog(job.log)}</pre> : null}
                           </Space>
                           {["queued", "running"].includes(job.status) ? (
                             <Button
@@ -1142,58 +1220,6 @@ function App() {
               </div>
             </div>
 
-            <Row gutter={[12, 12]}>
-              {(sourceCatalog?.sources || []).map((source) => (
-                <Col xs={24} md={12} key={source.id}>
-                  <Card size="small" className="source-card">
-                    <Flex justify="space-between" align="start" gap={8}>
-                      <Space direction="vertical" size={5}>
-                        <Space wrap>
-                          <Text strong>{source.name}</Text>
-                          <Tag color={tierColor(source.tier)}>{source.tier}级</Tag>
-                          <Tag>{source.crawlStatus}</Tag>
-                          {source.directCrawl ? <Tag color="green">可直采</Tag> : <Tag color="default">仅提示词</Tag>}
-                          {source.supportsChineseSearch ? <Tag color="purple">中文搜索</Tag> : <Tag>英文关键词</Tag>}
-                          {source.requiresApiKey ? <Tag color="orange">API Key</Tag> : <Tag>免 Key</Tag>}
-                        </Space>
-                        <Link href={source.url} target="_blank">
-                          {source.url}
-                        </Link>
-                      </Space>
-                      <Button size="small" icon={<CopyOutlined />} onClick={() => copyText(source.promptKeywords.join(" "))} />
-                    </Flex>
-                    <div className="source-section">
-                      <Text type="secondary">适合题型</Text>
-                      <div>{source.taskTypes.map((item) => <Tag key={item}>{item}</Tag>)}</div>
-                    </div>
-                    <div className="source-section">
-                      <Text type="secondary">适合内容</Text>
-                      <div>{source.bestFor.map((item) => <Tag color="blue" key={item}>{item}</Tag>)}</div>
-                    </div>
-                    <div className="source-section">
-                      <Text type="secondary">提示词</Text>
-                      <div>{source.promptKeywords.map((item) => <Tag key={item}>{item}</Tag>)}</div>
-                    </div>
-                    <div className="source-section">
-                      <Text type="secondary">关键词建议</Text>
-                      <div>
-                        <Tag color={source.supportsChineseSearch ? "purple" : "blue"}>
-                          {source.supportsChineseSearch ? "中文优先" : "英文优先"}
-                        </Tag>
-                        <Text type="secondary">{source.keywordAdvice || (source.supportsChineseSearch ? "优先用中文场景词 + 物体词。" : "优先用英文关键词，图库命中更准。")}</Text>
-                      </div>
-                    </div>
-                    {!source.directCrawl ? (
-                      <div className="source-section">
-                        <Text type="secondary">不可直采原因</Text>
-                        <div><Tag>{source.disabledReason || source.crawlStatus}</Tag></div>
-                      </div>
-                    ) : null}
-                    <Text type="secondary">{source.caution}</Text>
-                  </Card>
-                </Col>
-              ))}
-            </Row>
           </Space>
         </Drawer>
       </Layout>
@@ -1207,6 +1233,22 @@ function tierColor(tier: string) {
 
 function jobStatusColor(status: string) {
   return { queued: "default", running: "processing", completed: "success", failed: "error", canceled: "warning" }[status] || "default";
+}
+
+function jobProgressPercent(job: CrawlJob) {
+  if (job.status === "completed") return 100;
+  if (job.status === "failed" || job.status === "canceled") {
+    return Math.min(100, Math.round(((job.progress_processed || 0) / Math.max(job.limit_count || 1, 1)) * 100));
+  }
+  return Math.min(99, Math.round(((job.progress_processed || 0) / Math.max(job.limit_count || 1, 1)) * 100));
+}
+
+function tailLog(value: string) {
+  return value
+    .trim()
+    .split(/\r?\n/)
+    .slice(-4)
+    .join("\n");
 }
 
 function formatRemoteTime(value: string) {

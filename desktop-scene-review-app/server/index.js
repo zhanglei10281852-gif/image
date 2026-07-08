@@ -102,13 +102,14 @@ const SOURCE_CATALOG = [
     tier: "A",
     license: "open licenses / public domain aggregator",
     provider: "openverse",
-    crawlStatus: "可扩展",
-    requiresApiKey: false,
+    crawlStatus: "需 API Token",
+    requiresApiKey: true,
+    apiKeyEnv: "OPENVERSE_ACCESS_TOKEN",
     bestFor: ["开放许可发现", "跨站聚合检索", "素材初筛"],
     taskTypes: ["多来源扩展", "开放许可图片", "低重复候选发现"],
     promptKeywords: ["openly licensed", "photo", "commercial use", "tabletop"],
     supportsChineseSearch: false,
-    caution: "聚合站许可可能不准，必须点回原始来源页复核。"
+    caution: "Openverse API 当前需要授权；未配置 OPENVERSE_ACCESS_TOKEN 时不参与前端直采。聚合站许可可能不准，必须点回原始来源页复核。"
   },
   {
     id: "skitterphoto",
@@ -149,6 +150,7 @@ const SOURCE_CATALOG = [
     provider: "pexels",
     crawlStatus: "需 API Key",
     requiresApiKey: true,
+    apiKeyEnv: "PEXELS_API_KEY",
     bestFor: ["高质量通用照片", "室内设计", "人物/生活方式", "视频扩展"],
     taskTypes: ["高质量视觉评测", "通用照片采集", "视频帧任务"],
     promptKeywords: ["home office", "dining table", "kitchen counter", "workspace"],
@@ -164,6 +166,7 @@ const SOURCE_CATALOG = [
     provider: "pixabay",
     crawlStatus: "需 API Key",
     requiresApiKey: true,
+    apiKeyEnv: "PIXABAY_API_KEY",
     bestFor: ["通用物体", "自然/户外", "插图要单独过滤", "视频/音频扩展"],
     taskTypes: ["通用图片", "物体类别", "自然场景"],
     promptKeywords: ["photo", "real", "table", "counter", "workspace"],
@@ -179,6 +182,7 @@ const SOURCE_CATALOG = [
     provider: "unsplash",
     crawlStatus: "需 API Key",
     requiresApiKey: true,
+    apiKeyEnv: "UNSPLASH_ACCESS_KEY",
     bestFor: ["高质量摄影", "生活方式", "场景氛围", "营销类图"],
     taskTypes: ["视觉质量高的场景图", "生活方式图片"],
     promptKeywords: ["workspace", "coffee table", "kitchen counter", "candid"],
@@ -261,6 +265,51 @@ const SOURCE_CATALOG = [
     caution: "图库分类页命中为主，产量中等；需过滤尺寸不足、纯物体和不含桌面的图片。"
   },
   {
+    id: "free_images",
+    name: "Free-Images.com",
+    url: "https://free-images.com/",
+    tier: "B",
+    license: "public domain / upstream varies",
+    provider: "free_images_web",
+    crawlStatus: "已集成",
+    requiresApiKey: false,
+    bestFor: ["办公桌", "笔记本电脑", "餐桌/咖啡", "厨房台面", "长尾公开图片"],
+    taskTypes: ["桌面/台面局部场景", "办公/电脑/学习桌", "通用真实照片"],
+    promptKeywords: ["desk laptop", "coffee desk", "dining table", "kitchen counter"],
+    supportsChineseSearch: false,
+    caution: "可直采展示页和 original 图片 URL；页面常带 Wikimedia/Flickr 上游链接，入库后仍需人工筛掉不含桌面承载面的图。"
+  },
+  {
+    id: "wordpress_photos",
+    name: "WordPress Photo Directory",
+    url: "https://wordpress.org/photos/",
+    tier: "B",
+    license: "CC0",
+    provider: "wordpress_photos_web",
+    crawlStatus: "已集成",
+    requiresApiKey: false,
+    bestFor: ["开放 CC0 照片", "桌面/办公补充", "通用真实照片", "长尾物体"],
+    taskTypes: ["桌面/台面局部场景", "通用真实照片", "补充采集"],
+    promptKeywords: ["desk", "table", "coffee", "workspace"],
+    supportsChineseSearch: false,
+    caution: "可直采 photo 详情页和 pd.w.org 原图；结果覆盖广，需人工过滤无桌面承载面、纯风景和不相关图。"
+  },
+  {
+    id: "nappy",
+    name: "Nappy",
+    url: "https://www.nappy.co/",
+    tier: "C",
+    license: "Nappy free license",
+    provider: "nappy_web",
+    crawlStatus: "已集成",
+    requiresApiKey: false,
+    bestFor: ["真实生活方式", "居家办公", "人物+桌面", "多样化场景"],
+    taskTypes: ["办公/电脑/学习桌", "商品生活方式场景", "通用真实照片"],
+    promptKeywords: ["desk", "work from home", "laptop", "coffee"],
+    supportsChineseSearch: false,
+    caution: "可直采公开 photo 页；结果常含人物，需要人工筛掉无桌面、人物主体过强或评价任务不需要的图。"
+  },
+  {
     id: "negativespace",
     name: "NegativeSpace",
     url: "https://negativespace.co/",
@@ -297,13 +346,13 @@ const SOURCE_CATALOG = [
     tier: "B",
     license: "free personal/commercial use",
     provider: "goodstock_web",
-    crawlStatus: "待集成",
+    crawlStatus: "已集成",
     requiresApiKey: false,
     bestFor: ["室内家居", "桌面/咖啡", "生活方式", "局部物体"],
     taskTypes: ["商品生活方式场景", "桌面/台面局部场景", "通用真实照片"],
     promptKeywords: ["coffee table", "cup table", "desk", "kitchen"],
     supportsChineseSearch: false,
-    caution: "WordPress 结构清晰，可加入 provider；目前前端先展示，不直接采集。"
+    caution: "WordPress 结构清晰，已接入搜索页和作品页原图；仍需筛掉过强摆拍、纯背景或无桌面承载面的图。"
   },
   {
     id: "realisticshots",
@@ -312,13 +361,13 @@ const SOURCE_CATALOG = [
     tier: "C",
     license: "CC0",
     provider: "realisticshots_web",
-    crawlStatus: "待集成",
+    crawlStatus: "已集成",
     requiresApiKey: false,
     bestFor: ["通用摄影", "城市/自然", "少量生活方式"],
     taskTypes: ["通用真实照片", "补充采集"],
     promptKeywords: ["desk", "coffee", "table", "workspace"],
     supportsChineseSearch: false,
-    caution: "站点搜索能力弱、产量有限，适合作为补漏来源。"
+    caution: "Tumblr 标签页可直采；产量有限，适合补办公/桌面少量长尾图。"
   },
   {
     id: "shotstash",
@@ -327,13 +376,238 @@ const SOURCE_CATALOG = [
     tier: "B",
     license: "free / CC0-style",
     provider: "shotstash_web",
-    crawlStatus: "待集成",
+    crawlStatus: "已集成",
     requiresApiKey: false,
     bestFor: ["生活方式", "办公", "食物", "通用素材"],
     taskTypes: ["商品生活方式场景", "办公/电脑/学习桌", "食物/餐桌/厨房"],
     promptKeywords: ["coffee table", "desk", "food table", "workspace"],
     supportsChineseSearch: false,
-    caution: "可加入 provider；需过滤推广页和纯背景图。"
+    caution: "已接入搜索页和作品页原图；需过滤推广页、纯背景图和不含桌面承载面的素材。"
+  },
+  {
+    id: "stocksnap",
+    name: "StockSnap",
+    url: "https://stocksnap.io/",
+    tier: "B",
+    license: "StockSnap free license",
+    provider: "manual_stocksnap",
+    crawlStatus: "提示词/待集成",
+    requiresApiKey: false,
+    bestFor: ["办公桌", "咖啡/餐桌", "商业生活方式", "通用照片"],
+    taskTypes: ["桌面/台面局部场景", "办公/电脑/学习桌", "商品生活方式场景"],
+    promptKeywords: ["desk laptop", "coffee table", "dining table", "kitchen counter"],
+    supportsChineseSearch: false,
+    caution: "适合人工发现来源页；直接 provider 未接入前不进入采集下拉。"
+  },
+  {
+    id: "kaboompics",
+    name: "Kaboompics",
+    url: "https://kaboompics.com/",
+    tier: "B",
+    license: "Kaboompics license",
+    provider: "manual_kaboompics",
+    crawlStatus: "提示词/待集成",
+    requiresApiKey: false,
+    bestFor: ["室内生活方式", "办公桌", "餐桌/咖啡", "家居物体"],
+    taskTypes: ["桌面/台面局部场景", "商品生活方式场景", "室内局部场景"],
+    promptKeywords: ["desk", "coffee", "table", "home office"],
+    supportsChineseSearch: false,
+    caution: "图片质量高但许可需按作品页复核；当前作为提示词来源。"
+  },
+  {
+    id: "lifeofpix",
+    name: "Life of Pix",
+    url: "https://www.lifeofpix.com/",
+    tier: "C",
+    license: "Life of Pix free license",
+    provider: "manual_lifeofpix",
+    crawlStatus: "提示词/待集成",
+    requiresApiKey: false,
+    bestFor: ["通用摄影", "少量办公/生活方式", "补漏"],
+    taskTypes: ["通用真实照片", "补充采集"],
+    promptKeywords: ["desk", "coffee", "workspace", "table"],
+    supportsChineseSearch: false,
+    caution: "站点响应和搜索稳定性一般，先作为人工/提示词来源。"
+  },
+  {
+    id: "reshot",
+    name: "Reshot",
+    url: "https://www.reshot.com/",
+    tier: "C",
+    license: "Reshot license",
+    provider: "manual_reshot",
+    crawlStatus: "提示词/待集成",
+    requiresApiKey: false,
+    bestFor: ["补充素材", "图标/插画需排除", "少量照片发现"],
+    taskTypes: ["补充采集", "通用真实照片"],
+    promptKeywords: ["photo desk", "photo table", "workspace photo"],
+    supportsChineseSearch: false,
+    caution: "站内有图标/插画内容，必须只保留真实照片来源页。"
+  },
+  {
+    id: "publicdomainpictures",
+    name: "Public Domain Pictures",
+    url: "https://www.publicdomainpictures.net/",
+    tier: "C",
+    license: "public domain / per image",
+    provider: "manual_publicdomainpictures",
+    crawlStatus: "提示词/待集成",
+    requiresApiKey: false,
+    bestFor: ["通用照片", "食物/餐桌", "家居局部", "户外桌面补充"],
+    taskTypes: ["通用真实照片", "桌面/台面局部场景", "补充采集"],
+    promptKeywords: ["desk", "coffee table", "dining table", "kitchen"],
+    supportsChineseSearch: false,
+    caution: "产量大但噪声也大；保留图片详情页，过滤插画、AI感图、纯背景和低分辨率图。"
+  },
+  {
+    id: "goodfreephotos",
+    name: "Good Free Photos",
+    url: "https://www.goodfreephotos.com/",
+    tier: "C",
+    license: "public domain / per site",
+    provider: "manual_goodfreephotos",
+    crawlStatus: "提示词/待集成",
+    requiresApiKey: false,
+    bestFor: ["旅行/户外", "餐桌少量补充", "通用物体"],
+    taskTypes: ["通用真实照片", "户外/露台/野餐", "补充采集"],
+    promptKeywords: ["table", "coffee", "desk", "restaurant"],
+    supportsChineseSearch: false,
+    caution: "更适合补漏，桌面命中率不高；需要人工确认承载面和桌上物体。"
+  },
+  {
+    id: "barnimages",
+    name: "Barnimages",
+    url: "https://barnimages.com/",
+    tier: "B",
+    license: "Barnimages free license",
+    provider: "barnimages_web",
+    crawlStatus: "已集成",
+    requiresApiKey: false,
+    bestFor: ["生活方式", "室内局部", "办公/咖啡", "产品环境图"],
+    taskTypes: ["桌面/台面局部场景", "商品生活方式场景", "通用真实照片"],
+    promptKeywords: ["desk", "coffee", "table", "workspace"],
+    supportsChineseSearch: false,
+    caution: "可直采作品页原始上传图；搜索结果含赞助图，需要继续人工筛掉广告感过强或无桌面的图。"
+  },
+  {
+    id: "focastock",
+    name: "FOCA Stock",
+    url: "https://www.focastock.com/",
+    tier: "B",
+    license: "FOCA free license",
+    provider: "focastock_web",
+    crawlStatus: "已集成",
+    requiresApiKey: false,
+    bestFor: ["办公/桌面", "餐饮/咖啡", "城市生活方式", "通用补充"],
+    taskTypes: ["桌面/台面局部场景", "办公/电脑/学习桌", "餐桌/生活方式"],
+    promptKeywords: ["desk", "table", "laptop", "coffee", "workspace"],
+    supportsChineseSearch: false,
+    caution: "搜索相关性一般，适合和其他站点并行补充；保留作品页 URL 和 cdn.focastock.com 原图 URL。"
+  },
+  {
+    id: "splitshire",
+    name: "SplitShire",
+    url: "https://www.splitshire.com/",
+    tier: "C",
+    license: "SplitShire free license",
+    provider: "manual_splitshire",
+    crawlStatus: "提示词/待集成",
+    requiresApiKey: false,
+    bestFor: ["办公/生活方式", "食物饮品", "通用摄影"],
+    taskTypes: ["通用真实照片", "桌面/台面局部场景", "补充采集"],
+    promptKeywords: ["desk", "coffee", "laptop", "food"],
+    supportsChineseSearch: false,
+    caution: "更新少、命中量有限，只适合补充。"
+  },
+  {
+    id: "jeshoots",
+    name: "JESHOOTS",
+    url: "https://jeshoots.com/",
+    tier: "B",
+    license: "JESHOOTS free license",
+    provider: "manual_jeshoots",
+    crawlStatus: "提示词/待集成",
+    requiresApiKey: false,
+    bestFor: ["办公桌", "科技产品场景", "食物/厨房", "生活方式"],
+    taskTypes: ["办公/电脑/学习桌", "桌面/台面局部场景", "商品生活方式场景"],
+    promptKeywords: ["workspace", "laptop desk", "coffee table", "kitchen"],
+    supportsChineseSearch: false,
+    caution: "适合人工发现；注意区分免费作品页和推广内容。"
+  },
+  {
+    id: "magdeleine",
+    name: "Magdeleine",
+    url: "https://magdeleine.co/",
+    tier: "C",
+    license: "CC0 / CC BY, per photo",
+    provider: "magdeleine_web",
+    crawlStatus: "已集成",
+    requiresApiKey: false,
+    bestFor: ["策展型照片", "室内局部少量补充", "自然光场景"],
+    taskTypes: ["通用真实照片", "补充采集"],
+    promptKeywords: ["desk", "table", "coffee", "interior"],
+    supportsChineseSearch: false,
+    caution: "直采 food/objects 等分类并按关键词过滤；每张许可不同，必须保留作品页和 license；产量不高。"
+  },
+  {
+    id: "designerpics",
+    name: "DesignerPics",
+    url: "https://www.designerspics.com/",
+    tier: "C",
+    license: "free stock license",
+    provider: "manual_designerpics",
+    crawlStatus: "提示词/待集成",
+    requiresApiKey: false,
+    bestFor: ["办公/科技", "食物少量补充", "通用物体"],
+    taskTypes: ["办公/电脑/学习桌", "补充采集"],
+    promptKeywords: ["desk", "laptop", "coffee", "table"],
+    supportsChineseSearch: false,
+    caution: "老站点，页面结构可能变化；先人工使用。"
+  },
+  {
+    id: "newoldstock",
+    name: "New Old Stock",
+    url: "https://nos.twnsnd.co/",
+    tier: "C",
+    license: "public archive photos / per source",
+    provider: "manual_newoldstock",
+    crawlStatus: "提示词/待集成",
+    requiresApiKey: false,
+    bestFor: ["历史照片", "老办公室/餐桌少量补充", "风格扩展"],
+    taskTypes: ["通用真实照片", "补充采集"],
+    promptKeywords: ["desk", "table", "office", "restaurant"],
+    supportsChineseSearch: false,
+    caution: "偏历史档案照片，不适合作主源；需确认原始档案来源和许可。"
+  },
+  {
+    id: "rawpixel_public_domain",
+    name: "Rawpixel Public Domain",
+    url: "https://www.rawpixel.com/category/53/public-domain",
+    tier: "C",
+    license: "public domain collection / per item",
+    provider: "manual_rawpixel_public_domain",
+    crawlStatus: "提示词/待集成",
+    requiresApiKey: false,
+    bestFor: ["公版素材", "历史/静物补充", "少量桌面物体"],
+    taskTypes: ["通用真实照片", "补充采集"],
+    promptKeywords: ["desk public domain", "table public domain", "still life"],
+    supportsChineseSearch: false,
+    caution: "站内包含插画/扫描图/设计素材，必须只留真实照片；可能需要人工下载流程。"
+  },
+  {
+    id: "depositphotos_free",
+    name: "Depositphotos Free Files",
+    url: "https://depositphotos.com/free-files.html",
+    tier: "C",
+    license: "free files / account terms",
+    provider: "manual_depositphotos_free",
+    crawlStatus: "提示词/待集成",
+    requiresApiKey: false,
+    bestFor: ["商业生活方式少量补充", "办公/餐饮", "产品场景"],
+    taskTypes: ["商品生活方式场景", "补充采集"],
+    promptKeywords: ["desk", "dining table", "coffee", "workspace"],
+    supportsChineseSearch: false,
+    caution: "可能需要账号或下载条款限制；不要直爬，适合人工合规补充。"
   },
   {
     id: "foodiesfeed",
@@ -436,12 +710,21 @@ const SUPPORTED_DIRECT_CRAWL_PROVIDERS = new Set([
   "foodiesfeed_web",
   "libreshot_web",
   "freeimages_uk_web",
+  "free_images_web",
   "picjumbo_web",
   "isorepublic_web",
   "negativespace_web",
   "picography_web",
   "freestocks_web",
   "startupstockphotos_web",
+  "goodstock_web",
+  "shotstash_web",
+  "barnimages_web",
+  "realisticshots_web",
+  "wordpress_photos_web",
+  "nappy_web",
+  "focastock_web",
+  "magdeleine_web",
   "skitterphoto_web",
   "flickr",
   "flickr_web",
@@ -452,14 +735,22 @@ const SUPPORTED_DIRECT_CRAWL_PROVIDERS = new Set([
   "urls"
 ]);
 
+function apiKeyConfigured(source) {
+  return !source.requiresApiKey || Boolean(source.apiKeyEnv && process.env[source.apiKeyEnv]);
+}
+
 function directCrawlInfo(source) {
-  if (source.requiresApiKey) {
-    return { directCrawl: false, disabledReason: "需要 API Key" };
+  if (source.requiresApiKey && !apiKeyConfigured(source)) {
+    return { directCrawl: false, disabledReason: `需要 API Key：${source.apiKeyEnv || "未配置"}` };
   }
   if (!SUPPORTED_DIRECT_CRAWL_PROVIDERS.has(source.provider)) {
     return { directCrawl: false, disabledReason: "仅保留提示词/人工采集，不支持直接爬取" };
   }
-  return { directCrawl: true, disabledReason: "" };
+  return {
+    directCrawl: true,
+    disabledReason: "",
+    apiKeyConfigured: source.requiresApiKey ? apiKeyConfigured(source) : undefined
+  };
 }
 
 function openDatabase() {
@@ -529,8 +820,10 @@ function initDatabase() {
       kept INTEGER DEFAULT 0,
       flagged INTEGER DEFAULT 0,
       duplicates_skipped INTEGER DEFAULT 0,
+      progress_processed INTEGER DEFAULT 0,
       imported INTEGER DEFAULT 0,
       skipped_duplicates INTEGER DEFAULT 0,
+      last_progress_at TEXT,
       error TEXT,
       log TEXT DEFAULT ''
     );
@@ -552,6 +845,8 @@ function initDatabase() {
     );
   `);
   ensureColumn("records", "deleted_at", "TEXT");
+  ensureColumn("crawl_jobs", "progress_processed", "INTEGER DEFAULT 0");
+  ensureColumn("crawl_jobs", "last_progress_at", "TEXT");
   db.exec("CREATE INDEX IF NOT EXISTS idx_records_deleted_at ON records(deleted_at);");
   normalizeExistingSceneSettings();
   dedupeDatabaseRows();
@@ -669,6 +964,7 @@ function importRowsToDatabase(rows, sourceBaseDir, imagePathPrefix) {
       )
     LIMIT 1
   `);
+  const existingRecordLookup = db.prepare("SELECT record_id FROM records WHERE record_id = ? LIMIT 1");
   const dedupeLookup = db.prepare(`
     SELECT key_type, key_value FROM dedupe_keys
     WHERE (key_type = 'source_url' AND key_value = ? AND ? != '')
@@ -679,12 +975,13 @@ function importRowsToDatabase(rows, sourceBaseDir, imagePathPrefix) {
   db.exec("BEGIN");
   let imported = 0;
   let skippedDuplicates = 0;
+  let existingRecords = 0;
   try {
     rows.forEach((row, index) => {
       const recordId = row.record_id || `${index + 1}`;
       if (imagePathPrefix) {
         const shortEdge = parseInteger(row.short_edge) || 0;
-        if (row.risk_flag || !row.image_path || shortEdge < 512) {
+        if (row.risk_flag || shortEdge < 512) {
           skippedDuplicates += 1;
           return;
         }
@@ -692,6 +989,7 @@ function importRowsToDatabase(rows, sourceBaseDir, imagePathPrefix) {
       const preparedRow = prepareImportedRow(row, sourceBaseDir, imagePathPrefix);
       const normalizedSourceUrl = dedupeValue(preparedRow.normalized_source_url || preparedRow.source_url || "");
       const sourceImageUrl = dedupeValue(preparedRow.source_image_url || "");
+      const existingRecord = imagePathPrefix ? existingRecordLookup.get(recordId) : null;
       const duplicate = duplicateLookup.get(
         recordId,
         normalizedSourceUrl,
@@ -700,6 +998,10 @@ function importRowsToDatabase(rows, sourceBaseDir, imagePathPrefix) {
         sourceImageUrl
       );
       const dedupeDuplicate = dedupeLookup.get(normalizedSourceUrl, normalizedSourceUrl, sourceImageUrl, sourceImageUrl);
+      if (existingRecord) {
+        existingRecords += 1;
+        return;
+      }
       if (duplicate || dedupeDuplicate) {
         skippedDuplicates += 1;
         return;
@@ -742,7 +1044,7 @@ function importRowsToDatabase(rows, sourceBaseDir, imagePathPrefix) {
     db.exec("ROLLBACK");
     throw error;
   }
-  return { seen: rows.length, imported, skippedDuplicates };
+  return { seen: rows.length, imported, skippedDuplicates, existingRecords };
 }
 
 function dedupeValue(value) {
@@ -808,6 +1110,8 @@ function rowFromDatabase(row) {
   const payload = JSON.parse(row.payload || "{}");
   const imagePath = payload.image_path || row.image_path || "";
   const absoluteImagePath = resolveImagePath(imagePath);
+  const imageExists = imagePath ? fs.existsSync(absoluteImagePath) : false;
+  const sourceImageUrl = row.source_image_url || payload.source_image_url || "";
   const sceneSetting = normalizeSceneSetting(row.scene_setting || payload.scene_setting);
 
   return {
@@ -817,7 +1121,7 @@ function rowFromDatabase(row) {
     source_platform: row.source_platform || payload.source_platform || "",
     source_url: row.source_url || payload.source_url || "",
     normalized_source_url: row.normalized_source_url || payload.normalized_source_url || "",
-    source_image_url: row.source_image_url || payload.source_image_url || "",
+    source_image_url: sourceImageUrl,
     fetched_at: row.fetched_at || payload.fetched_at || "",
     query: row.query || payload.query || "",
     title: row.title || payload.title || "",
@@ -836,8 +1140,8 @@ function rowFromDatabase(row) {
     row_number: row.row_number,
     exported_at: row.exported_at || "",
     deleted_at: row.deleted_at || "",
-    image_exists: imagePath ? fs.existsSync(absoluteImagePath) : false,
-    image_api_url: `/api/image/${encodeURIComponent(row.record_id)}`,
+    image_exists: imageExists,
+    image_api_url: imageExists ? `/api/image/${encodeURIComponent(row.record_id)}` : sourceImageUrl,
     scene_cn: sceneLabel(sceneSetting),
     created_at: formatShanghai(row.fetched_at || payload.fetched_at),
     operator: AUTHOR,
@@ -1174,14 +1478,60 @@ function appendJobLog(jobId, text) {
 }
 
 function parseCrawlerSummary(log) {
-  const match = log.match(/done provider=\S+ kept=(\d+) flagged=(\d+) duplicates_skipped=(\d+) manifest=(\S+)/);
+  const match = log.match(/done provider=\S+ processed=(\d+) kept=(\d+) flagged=(\d+) duplicates_skipped=(\d+) manifest=(\S+)/);
   if (!match) return {};
   return {
-    kept: Number(match[1]),
-    flagged: Number(match[2]),
-    duplicates_skipped: Number(match[3]),
-    manifest_path: match[4]
+    progress_processed: Number(match[1]),
+    kept: Number(match[2]),
+    flagged: Number(match[3]),
+    duplicates_skipped: Number(match[4]),
+    manifest_path: match[5]
   };
+}
+
+function applyCrawlerProgress(jobId, text) {
+  const matches = [...text.matchAll(/progress provider=\S+ processed=(\d+) kept=(\d+) flagged=(\d+) duplicates_skipped=(\d+) manifest=(\S+)/g)];
+  if (!matches.length) return "";
+  const match = matches[matches.length - 1];
+  updateJob(jobId, {
+    progress_processed: Number(match[1]),
+    kept: Number(match[2]),
+    flagged: Number(match[3]),
+    duplicates_skipped: Number(match[4]),
+    manifest_path: match[5],
+    last_progress_at: new Date().toISOString()
+  });
+  return match[5];
+}
+
+function importRunningCrawlManifest(jobId, outputDir, manifestPath, { force = false } = {}) {
+  if (!manifestPath || !fs.existsSync(manifestPath)) return;
+  const active = activeJobs.get(jobId);
+  if ((!active && !force) || active?.importRunning) return;
+  const now = Date.now();
+  if (!force && active?.lastImportAt && now - active.lastImportAt < 2000) return;
+
+  if (active) {
+    active.importRunning = true;
+    active.lastImportAt = now;
+  }
+  try {
+    const rows = readManifestRows(manifestPath);
+    const result = importRowsToDatabase(rows, outputDir, path.posix.join("data/app_collections", jobId));
+    if (result.imported) {
+      const current = db
+        .prepare("SELECT imported, skipped_duplicates FROM crawl_jobs WHERE job_id = ?")
+        .get(jobId) || { imported: 0, skipped_duplicates: 0 };
+      updateJob(jobId, {
+        imported: Number(current.imported || 0) + Number(result.imported || 0)
+      });
+      appendJobLog(jobId, `incremental import imported=${result.imported}\n`);
+    }
+  } catch (error) {
+    appendJobLog(jobId, `incremental import skipped: ${error.message}\n`);
+  } finally {
+    if (active) active.importRunning = false;
+  }
 }
 
 function startCrawlJob(jobId, outputDir, provider, query, limitCount) {
@@ -1202,23 +1552,30 @@ function startCrawlJob(jobId, outputDir, provider, query, limitCount) {
     outputDir,
     "--sleep",
     "0.01",
+    "--progress-every",
+    "2",
+    "--skip-image-download",
     "--exclude-manifest",
     MANIFEST_PATH
   ];
 
   const child = spawn(PYTHON_PATH, args, { cwd: WORKSPACE_ROOT });
-  activeJobs.set(jobId, child);
+  activeJobs.set(jobId, { child, lastImportAt: 0, importRunning: false });
   let log = "";
 
   child.stdout.on("data", (chunk) => {
     const text = chunk.toString();
     log += text;
     appendJobLog(jobId, text);
+    const manifestPath = applyCrawlerProgress(jobId, text);
+    importRunningCrawlManifest(jobId, outputDir, manifestPath);
   });
   child.stderr.on("data", (chunk) => {
     const text = chunk.toString();
     log += text;
     appendJobLog(jobId, text);
+    const manifestPath = applyCrawlerProgress(jobId, text);
+    importRunningCrawlManifest(jobId, outputDir, manifestPath);
   });
   child.on("error", (error) => {
     activeJobs.delete(jobId);
@@ -1230,21 +1587,28 @@ function startCrawlJob(jobId, outputDir, provider, query, limitCount) {
     activeJobs.delete(jobId);
     const current = db.prepare("SELECT status FROM crawl_jobs WHERE job_id = ?").get(jobId);
     if (current?.status === "canceled") {
+      const manifestPath = db.prepare("SELECT manifest_path FROM crawl_jobs WHERE job_id = ?").get(jobId)?.manifest_path || path.join(outputDir, "manifest.csv");
+      importRunningCrawlManifest(jobId, outputDir, manifestPath, { force: true });
       appendJobLog(jobId, "crawl canceled by user\n");
       return;
     }
     const summary = parseCrawlerSummary(log);
     const manifestPath = summary.manifest_path || path.join(outputDir, "manifest.csv");
-    let imported = 0;
-    let skippedDuplicates = 0;
+    const currentCounts =
+      db.prepare("SELECT imported, skipped_duplicates FROM crawl_jobs WHERE job_id = ?").get(jobId) || {
+        imported: 0,
+        skipped_duplicates: 0
+      };
+    let imported = Number(currentCounts.imported || 0);
+    let skippedDuplicates = Number(currentCounts.skipped_duplicates || 0);
     let error = "";
 
     if (code === 0) {
       try {
         const rows = fs.existsSync(manifestPath) ? readManifestRows(manifestPath) : [];
         const result = importRowsToDatabase(rows, outputDir, path.posix.join("data/app_collections", jobId));
-        imported = result.imported;
-        skippedDuplicates = result.skippedDuplicates;
+        imported += result.imported;
+        skippedDuplicates += result.skippedDuplicates;
       } catch (importError) {
         error = importError.message;
       }
@@ -1258,6 +1622,7 @@ function startCrawlJob(jobId, outputDir, provider, query, limitCount) {
       kept: summary.kept || 0,
       flagged: summary.flagged || 0,
       duplicates_skipped: summary.duplicates_skipped || 0,
+      progress_processed: summary.progress_processed || 0,
       imported,
       skipped_duplicates: skippedDuplicates,
       manifest_path: manifestPath,
@@ -1267,7 +1632,13 @@ function startCrawlJob(jobId, outputDir, provider, query, limitCount) {
 }
 
 function listJobs() {
-  return db.prepare("SELECT * FROM crawl_jobs ORDER BY started_at DESC LIMIT 30").all();
+  return db.prepare(`
+    SELECT * FROM crawl_jobs
+    ORDER BY
+      CASE WHEN status IN ('queued', 'running') THEN 0 ELSE 1 END,
+      started_at DESC
+    LIMIT 200
+  `).all();
 }
 
 function cancelCrawlJob(jobId) {
@@ -1279,15 +1650,17 @@ function cancelCrawlJob(jobId) {
     return { ok: false, status: 400, message: `任务已结束：${job.status}` };
   }
 
-  const child = activeJobs.get(jobId);
+  const active = activeJobs.get(jobId);
+  const manifestPath = job.manifest_path || path.join(job.output_dir, "manifest.csv");
+  importRunningCrawlManifest(jobId, job.output_dir, manifestPath, { force: true });
   updateJob(jobId, {
     status: "canceled",
     finished_at: new Date().toISOString(),
     error: "canceled by user"
   });
   appendJobLog(jobId, "cancel requested by user\n");
-  if (child) {
-    child.kill("SIGTERM");
+  if (active?.child) {
+    active.child.kill("SIGTERM");
   }
   activeJobs.delete(jobId);
   return { ok: true, canceled: true };
@@ -1478,11 +1851,22 @@ app.get("/api/meta", (_req, res) => {
 });
 
 app.get("/api/source-catalog", (_req, res) => {
+  const sources = SOURCE_CATALOG
+    .filter((source) => !source.requiresApiKey || apiKeyConfigured(source))
+    .map((source) => ({ ...source, ...directCrawlInfo(source) }));
+  const counts = {
+    total: sources.length,
+    noKey: sources.filter((source) => !source.requiresApiKey).length,
+    direct: sources.filter((source) => source.directCrawl).length,
+    directNoKey: sources.filter((source) => source.directCrawl && !source.requiresApiKey).length,
+    promptOnly: sources.filter((source) => !source.directCrawl).length
+  };
   res.json({
-    sources: SOURCE_CATALOG.map((source) => ({ ...source, ...directCrawlInfo(source) })),
+    sources,
+    counts,
     tiers: [
       { value: "S", label: "S 级", description: "最适合长期主源：可追溯、许可清晰、真实照片比例高" },
-      { value: "A", label: "A 级", description: "适合稳定扩展：质量高或覆盖广，但可能需要 API Key/复核" },
+      { value: "A", label: "A 级", description: "适合稳定扩展：质量高或覆盖广；需要 API Key 的来源未配置时会隐藏" },
       { value: "B", label: "B 级", description: "适合专项补充：题型明确时很好用，需更强过滤" },
       { value: "C", label: "C 级", description: "只做补漏：产量低或噪声高" }
     ],
@@ -1638,12 +2022,12 @@ app.post("/api/crawl/jobs/:jobId/cancel", (req, res) => {
 app.post("/api/crawl/start", async (req, res) => {
   try {
     initDatabase();
-    const provider = String(req.body.provider || "").trim();
+    const providersInput = Array.isArray(req.body.providers) ? req.body.providers : [req.body.provider];
+    const providers = [...new Set(providersInput.map((item) => String(item || "").trim()).filter(Boolean))];
     const query = String(req.body.query || "").trim();
     const rawLimit = Number(req.body.limit || 20);
     const limitCount = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : 20;
-    const source = SOURCE_CATALOG.find((item) => item.provider === provider);
-    if (!source) {
+    if (!providers.length) {
       res.status(400).json({ message: "请选择已支持的来源 provider" });
       return;
     }
@@ -1651,22 +2035,36 @@ app.post("/api/crawl/start", async (req, res) => {
       res.status(400).json({ message: "请输入关键词" });
       return;
     }
-    if (source.requiresApiKey) {
-      res.status(400).json({ message: `${source.name} 需要 API Key，当前前端采集暂不启用该来源` });
-      return;
+
+    const sources = [];
+    for (const provider of providers) {
+      const source = SOURCE_CATALOG.find((item) => item.provider === provider);
+      if (!source) {
+        res.status(400).json({ message: `请选择已支持的来源 provider：${provider}` });
+        return;
+      }
+      if (source.requiresApiKey && !apiKeyConfigured(source)) {
+        res.status(400).json({ message: `${source.name} 需要 API Key：${source.apiKeyEnv || "未配置"}` });
+        return;
+      }
+      const crawlInfo = directCrawlInfo(source);
+      if (!crawlInfo.directCrawl) {
+        res.status(400).json({ message: `${source.name} 不支持前端直接采集：${crawlInfo.disabledReason}。请使用提示词或换一个已集成网站。` });
+        return;
+      }
+      sources.push(source);
     }
-    const crawlInfo = directCrawlInfo(source);
-    if (!crawlInfo.directCrawl) {
-      res.status(400).json({ message: `${source.name} 不支持前端直接采集：${crawlInfo.disabledReason}。请使用提示词或换一个已集成网站。` });
-      return;
-    }
+
     const remoteConfig = getRemoteDedupeConfig();
     if (remoteConfig.enabled) {
       await pullRemoteDedupe({ force: true });
     }
-    const { jobId, outputDir } = createCrawlJob({ provider, query, limitCount });
-    startCrawlJob(jobId, outputDir, provider, query, limitCount);
-    res.json({ jobId });
+    const jobs = sources.map((source) => {
+      const { jobId, outputDir } = createCrawlJob({ provider: source.provider, query, limitCount });
+      startCrawlJob(jobId, outputDir, source.provider, query, limitCount);
+      return { jobId, provider: source.provider, name: source.name };
+    });
+    res.json({ jobIds: jobs.map((job) => job.jobId), jobs });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
