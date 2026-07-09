@@ -373,6 +373,14 @@ function App() {
     setRefreshKey((value) => value + 1);
   };
 
+  const currentFilters = () => ({
+    q: query.trim(),
+    platform,
+    scene,
+    risk,
+    exportStatus
+  });
+
   const startCrawl = async () => {
     if (!crawlProviders.length) {
       messageApi.warning("请选择至少一个支持直接采集的网站");
@@ -446,6 +454,33 @@ function App() {
       cancelText: "取消",
       async onOk() {
         await deleteRecords(selectedIds);
+      }
+    });
+  };
+
+  const deleteAllFiltered = () => {
+    if (!total) {
+      messageApi.warning("当前筛选结果没有可删除的图片");
+      return;
+    }
+    modalApi.confirm({
+      title: "删除当前筛选结果？",
+      content: `将从本地 SQLite 列表删除当前筛选结果中的 ${total} 条记录，不会删除硬盘图片文件。`,
+      okText: "全部删除",
+      okButtonProps: { danger: true },
+      cancelText: "取消",
+      async onOk() {
+        const res = await fetch("/api/records/delete-all", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filters: currentFilters() })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || "全部删除失败");
+        setSelectedIds([]);
+        setPage(1);
+        setRefreshKey((value) => value + 1);
+        messageApi.success(`已删除 ${data.deleted || 0} 条`);
       }
     });
   };
@@ -632,13 +667,7 @@ function App() {
           selectedIds: exportAll ? [] : selectedIds,
           exportAll,
           fields: selectedFields,
-          filters: {
-            q: query.trim(),
-            platform,
-            scene,
-            risk,
-            exportStatus
-          }
+          filters: currentFilters()
         })
       });
       if (!res.ok) {
@@ -813,6 +842,9 @@ function App() {
               </Button>
               <Button danger icon={<DeleteOutlined />} onClick={deleteSelected}>
                 删除选中
+              </Button>
+              <Button danger icon={<DeleteOutlined />} disabled={!total} onClick={deleteAllFiltered}>
+                删除当前列表全部
               </Button>
             </Flex>
           </section>

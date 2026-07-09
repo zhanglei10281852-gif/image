@@ -2180,6 +2180,17 @@ app.delete("/api/records", (req, res) => {
   }
 });
 
+app.post("/api/records/delete-all", (req, res) => {
+  try {
+    const rows = filterRows(readRecordsFromDatabase(), req.body.filters || {});
+    const recordIds = rows.map((row) => row.id);
+    deleteRecords(recordIds);
+    res.json({ deleted: recordIds.length });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 app.post("/api/export", async (req, res) => {
   try {
     initDatabase();
