@@ -190,6 +190,7 @@ function App() {
   const [crawlLimit, setCrawlLimit] = useState<number | null>(20);
   const [crawlStarting, setCrawlStarting] = useState(false);
   const [crawlJobs, setCrawlJobs] = useState<CrawlJob[]>([]);
+  const [pendingImportedCount, setPendingImportedCount] = useState(0);
   const [cancelingJobId, setCancelingJobId] = useState<string>();
   const [adminBusy, setAdminBusy] = useState(false);
   const [remoteDedupe, setRemoteDedupe] = useState<RemoteDedupeConfig>({
@@ -331,29 +332,25 @@ function App() {
           ["completed", "failed"].includes(job.status)
         );
       });
-      const importedIncreased = jobs.some((job) => {
+      const importedDelta = jobs.reduce((sum, job) => {
         const currentImported = Number(job.imported || 0);
         const oldImported = previousImported.get(job.job_id) || 0;
-        return jobPollReadyRef.current && currentImported > oldImported;
-      });
+        return jobPollReadyRef.current && currentImported > oldImported ? sum + currentImported - oldImported : sum;
+      }, 0);
       jobStatusRef.current = new Map(jobs.map((job) => [job.job_id, job.status]));
       jobImportedRef.current = new Map(jobs.map((job) => [job.job_id, Number(job.imported || 0)]));
       jobPollReadyRef.current = true;
 
-      if (importedIncreased) {
-        setSelectedIds([]);
-        setRefreshKey((value) => value + 1);
+      if (importedDelta > 0) {
+        setPendingImportedCount((value) => value + importedDelta);
       }
 
       if (finishedJobs.length) {
         const imported = finishedJobs.reduce((sum, job) => sum + Number(job.imported || 0), 0);
-        setSelectedIds([]);
-        setPage(1);
-        setRefreshKey((value) => value + 1);
         if (imported > 0) {
-          messageApi.success(`采集完成，已入库 ${imported} 条，列表已刷新`);
+          messageApi.success(`采集完成，已入库 ${imported} 条，可点击右下角按钮刷新列表`);
         } else if (finishedJobs.some((job) => job.status === "failed")) {
-          messageApi.warning("采集任务结束但有失败项，列表已刷新");
+          messageApi.warning("采集任务结束但有失败项，可点击右下角按钮刷新列表");
         }
       }
     } catch {
@@ -369,6 +366,11 @@ function App() {
     } catch {
       // 不阻塞主流程。
     }
+  };
+
+  const refreshPendingRecords = () => {
+    setPendingImportedCount(0);
+    setRefreshKey((value) => value + 1);
   };
 
   const startCrawl = async () => {
@@ -891,6 +893,18 @@ function App() {
             />
           </Flex>
         </Content>
+
+        {pendingImportedCount > 0 ? (
+          <Button
+            type="primary"
+            size="large"
+            icon={<ReloadOutlined />}
+            className="new-records-button"
+            onClick={refreshPendingRecords}
+          >
+            有 {pendingImportedCount} 条新数据，点击刷新
+          </Button>
+        ) : null}
 
         <Drawer
           title="导出字段"

@@ -521,6 +521,143 @@ def provider_duckduckgo_web(session: requests.Session, query: str, limit: int) -
         offset += 30
 
 
+def provider_site_search_web(
+    session: requests.Session,
+    query: str,
+    limit: int,
+    *,
+    platform: str,
+    domains: Sequence[str],
+    keyword_suffix: str = "",
+) -> Iterator[Candidate]:
+    emitted = 0
+    seen_urls: set[str] = set()
+    offset = 0
+    domain_query = f"site:{domains[0]}" if len(domains) == 1 else " OR ".join(f"site:{domain}" for domain in domains)
+    search_query = f"{domain_query} {query} {keyword_suffix}".strip() if len(domains) == 1 else f"({domain_query}) {query} {keyword_suffix}".strip()
+    while emitted < limit and offset <= 300:
+        links: list[str] = []
+        try:
+            resp = session.get(
+                "https://html.duckduckgo.com/html/",
+                params={"q": search_query, "s": str(offset)},
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=12,
+            )
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, "html.parser")
+            links = [decode_duckduckgo_url(a.get("href", "")) for a in soup.select("a.result__a")]
+        except requests.RequestException:
+            links = []
+        if not links:
+            try:
+                resp = session.get(
+                    "https://www.bing.com/search",
+                    params={"q": search_query, "first": str(offset + 1)},
+                    headers={"User-Agent": "Mozilla/5.0"},
+                    timeout=12,
+                )
+                resp.raise_for_status()
+                soup = BeautifulSoup(resp.text, "html.parser")
+                links = [a.get("href", "") for a in soup.select("li.b_algo h2 a[href], ol#b_results a[href]")]
+            except requests.RequestException:
+                links = []
+        links = [link for link in links if link.startswith(("http://", "https://"))]
+        if not links:
+            break
+
+        page_emitted = 0
+        for source_url in links:
+            if emitted >= limit:
+                break
+            normalized = normalize_url(source_url)
+            if normalized in seen_urls:
+                continue
+            seen_urls.add(normalized)
+            domain = urlparse(source_url).netloc.lower().removeprefix("www.")
+            if not any(domain == allowed or domain.endswith("." + allowed) for allowed in domains):
+                continue
+            try:
+                candidate = candidate_from_url(session, source_url)
+            except Exception:
+                continue
+            if not candidate.source_image_url:
+                continue
+            candidate.source_platform = platform
+            candidate.query = query
+            if candidate.license_type == "restricted":
+                candidate.license_type = "unknown"
+            candidate.notes = "; ".join(
+                x
+                for x in [
+                    candidate.notes,
+                    f"public {platform} page discovered via DuckDuckGo site search; image extracted from original source page; license not explicitly stated",
+                ]
+                if x
+            )
+            emitted += 1
+            page_emitted += 1
+            yield candidate
+        if page_emitted == 0 and offset > 90:
+            break
+        offset += 30
+
+
+def provider_douban_web(session: requests.Session, query: str, limit: int) -> Iterator[Candidate]:
+    return provider_site_search_web(
+        session,
+        query,
+        limit,
+        platform="douban_web",
+        domains=["douban.com"],
+        keyword_suffix="桌面 餐桌 书桌 台面",
+    )
+
+
+def provider_zhihu_web(session: requests.Session, query: str, limit: int) -> Iterator[Candidate]:
+    return provider_site_search_web(
+        session,
+        query,
+        limit,
+        platform="zhihu_web",
+        domains=["zhihu.com"],
+        keyword_suffix="桌面 餐桌 书桌 台面",
+    )
+
+
+def provider_smzdm_web(session: requests.Session, query: str, limit: int) -> Iterator[Candidate]:
+    return provider_site_search_web(
+        session,
+        query,
+        limit,
+        platform="smzdm_web",
+        domains=["smzdm.com"],
+        keyword_suffix="晒单 桌面 餐桌 书桌 台面",
+    )
+
+
+def provider_xiachufang_web(session: requests.Session, query: str, limit: int) -> Iterator[Candidate]:
+    return provider_site_search_web(
+        session,
+        query,
+        limit,
+        platform="xiachufang_web",
+        domains=["xiachufang.com"],
+        keyword_suffix="餐桌 厨房 台面 食材",
+    )
+
+
+def provider_sohu_web(session: requests.Session, query: str, limit: int) -> Iterator[Candidate]:
+    return provider_site_search_web(
+        session,
+        query,
+        limit,
+        platform="sohu_web",
+        domains=["sohu.com"],
+        keyword_suffix="桌面 餐桌 书桌 台面",
+    )
+
+
 def provider_pxhere_web(session: requests.Session, query: str, limit: int) -> Iterator[Candidate]:
     emitted = 0
     seen_pages: set[str] = set()
@@ -2193,6 +2330,11 @@ def collect(args: argparse.Namespace) -> int:
         "wikimedia": lambda: provider_wikimedia(session, args.query, args.limit),
         "openverse": lambda: provider_openverse(session, args.query, args.limit),
         "duckduckgo_web": lambda: provider_duckduckgo_web(session, args.query, args.limit),
+        "douban_web": lambda: provider_douban_web(session, args.query, args.limit),
+        "zhihu_web": lambda: provider_zhihu_web(session, args.query, args.limit),
+        "smzdm_web": lambda: provider_smzdm_web(session, args.query, args.limit),
+        "xiachufang_web": lambda: provider_xiachufang_web(session, args.query, args.limit),
+        "sohu_web": lambda: provider_sohu_web(session, args.query, args.limit),
         "pxhere_web": lambda: provider_pxhere_web(session, args.query, args.limit),
         "foodiesfeed_web": lambda: provider_foodiesfeed_web(session, args.query, args.limit),
         "libreshot_web": lambda: provider_libreshot_web(session, args.query, args.limit),
@@ -2396,7 +2538,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     collect_parser = sub.add_parser("collect", help="collect candidate images")
-    collect_parser.add_argument("--provider", required=True, choices=["wikimedia", "openverse", "duckduckgo_web", "pxhere_web", "foodiesfeed_web", "libreshot_web", "freeimages_uk_web", "free_images_web", "picjumbo_web", "isorepublic_web", "negativespace_web", "picography_web", "freestocks_web", "startupstockphotos_web", "goodstock_web", "shotstash_web", "barnimages_web", "realisticshots_web", "wordpress_photos_web", "nappy_web", "focastock_web", "magdeleine_web", "skitterphoto_web", "flickr", "flickr_web", "unsplash", "pexels", "pixabay", "shopify_burst", "urls"])
+    collect_parser.add_argument("--provider", required=True, choices=["wikimedia", "openverse", "duckduckgo_web", "douban_web", "zhihu_web", "smzdm_web", "xiachufang_web", "sohu_web", "pxhere_web", "foodiesfeed_web", "libreshot_web", "freeimages_uk_web", "free_images_web", "picjumbo_web", "isorepublic_web", "negativespace_web", "picography_web", "freestocks_web", "startupstockphotos_web", "goodstock_web", "shotstash_web", "barnimages_web", "realisticshots_web", "wordpress_photos_web", "nappy_web", "focastock_web", "magdeleine_web", "skitterphoto_web", "flickr", "flickr_web", "unsplash", "pexels", "pixabay", "shopify_burst", "urls"])
     collect_parser.add_argument("--query", default="", help="search query for API providers")
     collect_parser.add_argument("--url-list", default="", help="text file of source URLs for provider=urls")
     collect_parser.add_argument("--limit", type=int, default=50)

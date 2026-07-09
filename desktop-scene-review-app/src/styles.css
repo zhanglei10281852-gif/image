@@ -318,6 +318,14 @@ body {
   display: none;
 }
 
+.new-records-button {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1000;
+  box-shadow: 0 10px 26px rgba(22, 119, 255, 0.26);
+}
+
 @media (max-width: 720px) {
   .app-header,
   .app-content {
@@ -328,5 +336,14 @@ body {
   .filter-select,
   .search-input {
     width: 100%;
+  }
+
+  .new-records-button {
+    right: 12px;
+    bottom: 12px;
+    max-width: calc(100vw - 24px);
+    height: auto;
+    min-height: 40px;
+    white-space: normal;
   }
 }
